@@ -1,0 +1,420 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<meta name="description" content="See your practice's published UnitedHealthcare rates next to the typical rate for your specialty in your state.">
+<title>Payor Rate Check</title>
+<meta name="claude:viewport-fit-sides" content="cover">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Newsreader:opsz,wght@6..72,400;6..72,500&family=Inter:wght@400;500;600&display=swap">
+<style>
+/* Layout: the sales lookup's quiet white page and banknote-green engraving, turned toward the practice:
+   one search, then one answer in a sentence, a yearly figure, a row per code, and a way to reach RSK. */
+:root {
+  color-scheme: light;
+  --bg: #ffffff;
+  --ink: #141413;
+  --muted: #74746f;
+  --line: #e9e8e3;
+  --soft: #f4f3ef;
+  --art: #1e5b40;
+  --below: #b03a1c;
+  --below-soft: #fbe9e3;
+  --above: #1e5b40;
+  --above-soft: #e6f0ea;
+  --hover: #f7f6f2;
+  --btn-fg: #ffffff;
+  --f-serif: "Newsreader", "Iowan Old Style", Georgia, serif;
+  --f-sans: "Inter", system-ui, -apple-system, "Segoe UI", sans-serif;
+}
+* { box-sizing: border-box; }
+body {
+  margin: 0; color: var(--ink); background: var(--bg); font-family: var(--f-sans); font-size: 14px; line-height: 1.55;
+  -webkit-font-smoothing: antialiased;
+  padding-left: max(16px, env(safe-area-inset-left, 0px)); padding-right: max(16px, env(safe-area-inset-right, 0px));
+  padding-block: 0 0;
+}
+.page { max-width: 1120px; margin: 0 auto; }
+
+.nav { display: flex; align-items: center; justify-content: space-between; gap: 16px; padding-block: 18px; }
+.brand { display: flex; align-items: center; gap: 8px; font-weight: 600; font-size: 0.93rem; letter-spacing: -0.01em; white-space: nowrap; }
+.brand svg { color: var(--art); }
+.tabs { display: flex; gap: 22px; }
+.tabs button { font: inherit; font-size: 0.86rem; color: var(--muted); background: none; border: 0; padding: 4px 0; cursor: pointer; white-space: nowrap; transition: color 0.15s; }
+.tabs button:hover, .tabs button[aria-selected="true"] { color: var(--ink); }
+.tabs button:focus-visible { outline: 2px solid var(--art); outline-offset: 4px; border-radius: 2px; }
+
+/* The engraving: a canvas-drawn mask, inked with one token so it follows the theme */
+.scene { position: relative; overflow: hidden; height: clamp(220px, 46vh, 440px); }
+.scene .art { position: absolute; inset: 0; background: var(--art);
+  -webkit-mask: var(--scene) center / cover no-repeat; mask: var(--scene) center / cover no-repeat; }
+.scene.low { height: 170px; }
+.scene.low .art { -webkit-mask-position: center 62%; mask-position: center 62%; }
+.balloon { position: absolute; top: 12%; left: 30%; width: 34px; color: var(--art); }
+.balloon .skin { fill: var(--bg); }
+@media (prefers-reduced-motion: no-preference) {
+  .balloon { animation: cross 120s linear -36s infinite; }
+  .balloon svg { animation: bob 7s ease-in-out infinite alternate; }
+  @keyframes cross { from { left: -6%; } to { left: 104%; } }
+  @keyframes bob { to { transform: translateY(14px); } }
+}
+
+.hero, h1 { display: none; }
+h1 { font-family: var(--f-serif); font-weight: 400; font-size: clamp(2.1rem, 4.4vw, 3.2rem); letter-spacing: -0.02em; line-height: 1.05; margin: 0; }
+body.home .hero { display: block; }
+body.home h1 { display: block; }
+body.home .intro { display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 440px); gap: 20px 40px; align-items: end; padding-block: 30px 8px; }
+
+/* Search */
+.search { position: relative; max-width: 560px; }
+body.home .search { max-width: none; }
+.search input { width: 100%; font: inherit; font-size: 0.98rem; color: var(--ink); background: var(--soft); border: 1px solid transparent; border-radius: 999px; padding: 12px 52px 12px 18px; transition: border-color 0.15s, background 0.15s; }
+.search input::placeholder { color: var(--muted); }
+.search input:focus { outline: none; border-color: var(--ink); background: var(--bg); }
+.search input::-webkit-search-cancel-button { display: none; }
+.go { position: absolute; right: 6px; top: 50%; transform: translateY(-50%); width: 34px; height: 34px; border-radius: 50%; border: 0; background: var(--ink); color: var(--btn-fg); display: grid; place-items: center; cursor: pointer; }
+.go svg { transition: transform 0.2s; }
+.go:hover svg { transform: translateX(2px); }
+.go:focus-visible { outline: 2px solid var(--art); outline-offset: 3px; }
+.results { position: absolute; top: calc(100% + 8px); left: 0; right: 0; z-index: 5; background: var(--bg); border: 1px solid var(--line); border-radius: 14px; box-shadow: 0 16px 40px -20px rgba(0, 0, 0, 0.35); max-height: 400px; overflow-y: auto; padding: 5px; }
+.results button { all: unset; box-sizing: border-box; width: 100%; display: grid; grid-template-columns: 1fr auto; gap: 1px 12px; padding: 9px 12px; border-radius: 10px; cursor: pointer; }
+.results button:hover, .results button.on, .results button:focus-visible { background: var(--soft); }
+.results .nm { font-weight: 500; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.results .tag { color: var(--muted); font-size: 0.82rem; display: flex; align-items: center; gap: 8px; justify-content: flex-end; white-space: nowrap; }
+.results .sub { grid-column: 1 / -1; color: var(--muted); font-size: 0.8rem; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.results .sub b { font-weight: 400; font-variant-numeric: tabular-nums; }
+.results .none { padding: 10px 12px; color: var(--muted); }
+.chip { font-size: 0.74rem; font-weight: 500; padding: 1px 7px; border-radius: 999px; font-variant-numeric: tabular-nums; }
+.chip.low { background: var(--below-soft); color: var(--below); }
+.chip.high { background: var(--above-soft); color: var(--above); }
+.chip.even { background: var(--soft); color: var(--muted); }
+
+/* The rate sheet: no card, only rules */
+#view-look { display: grid; gap: 28px; min-width: 0; }
+.sheet { display: grid; gap: 28px; min-width: 0; border-top: 1px solid var(--line); padding-top: 30px; }
+#view-camp { border-top: 0; padding-top: 12px; }
+.ghead { display: flex; flex-wrap: wrap; justify-content: space-between; gap: 18px 40px; align-items: flex-end; }
+.ghead > div { min-width: 0; }
+.ghead h2 { font-family: var(--f-serif); font-weight: 400; font-size: clamp(1.9rem, 4vw, 2.7rem); line-height: 1.05; letter-spacing: -0.02em; margin: 0 0 10px; text-wrap: balance; }
+.facts { display: flex; flex-wrap: wrap; gap: 2px 18px; color: var(--muted); font-size: 0.88rem; }
+.facts b { color: var(--ink); font-weight: 500; }
+.facts .mono { font-variant-numeric: tabular-nums; }
+.badges { display: flex; gap: 14px 36px; align-items: flex-end; flex-wrap: wrap; }
+.money { display: grid; line-height: 1.15; }
+.money .amt { font-family: var(--f-serif); font-size: 2.5rem; letter-spacing: -0.02em; line-height: 1; }
+.money span:last-child { color: var(--muted); font-size: 0.8rem; }
+.verdict { display: flex; gap: 10px; align-items: flex-end; font-size: 0.8rem; line-height: 1.3; color: var(--muted); }
+.verdict .big { font-family: var(--f-serif); font-size: 2.5rem; line-height: 1; letter-spacing: -0.02em; color: var(--below); }
+.netpick { display: flex; align-items: center; gap: 10px; flex-wrap: wrap; font-size: 0.86rem; color: var(--muted); }
+select { font: inherit; font-size: 0.86rem; color: var(--ink); background: var(--soft); border: 1px solid transparent; border-radius: 999px; padding: 7px 12px; cursor: pointer; max-width: 100%; }
+select:focus-visible { outline: 2px solid var(--art); outline-offset: 2px; }
+
+.email { border: 1px solid var(--line); border-radius: 14px; padding: 24px; display: grid; gap: 18px; }
+.email p { margin: 0; max-width: 70ch; }
+.email #line { white-space: pre-line; font-size: 1rem; line-height: 1.75; }
+.email #line mark { background: color-mix(in srgb, var(--art) 16%, transparent); color: inherit; padding: 1px 4px; border-radius: 4px; }
+.email .ask { color: var(--muted); font-size: 0.86rem; border-top: 1px solid var(--line); padding-top: 16px; }
+.email .ask b { color: var(--ink); font-weight: 500; }
+.row { display: flex; gap: 8px 10px; align-items: center; flex-wrap: wrap; }
+.btn { font: inherit; font-weight: 500; font-size: 0.86rem; padding: 9px 16px; border-radius: 999px; cursor: pointer; border: 0; background: var(--ink); color: var(--btn-fg); transition: opacity 0.15s, background 0.15s; }
+.btn:hover { opacity: 0.82; }
+.btn.ghost { background: var(--soft); color: var(--ink); }
+.btn.ghost:hover { opacity: 1; background: var(--line); }
+.btn:focus-visible { outline: 2px solid var(--art); outline-offset: 3px; }
+.toast { color: var(--muted); font-size: 0.84rem; }
+
+.tablewrap { overflow-x: auto; min-width: 0; }
+table { width: 100%; border-collapse: collapse; font-size: 0.93rem; color: var(--ink); }
+th { text-align: left; font-size: 0.8rem; color: var(--muted); font-weight: 400; padding: 0 10px 10px; border-bottom: 1px solid var(--line); white-space: nowrap; }
+td { padding: 13px 10px; border-bottom: 1px solid var(--line); vertical-align: middle; }
+th:first-child, td:first-child { padding-left: 0; }
+th:last-child, td:last-child { padding-right: 0; }
+td.num, th.num { text-align: right; font-variant-numeric: tabular-nums; white-space: nowrap; }
+td.code { font-variant-numeric: tabular-nums; font-weight: 500; }
+.gapcell { display: inline-flex; align-items: center; gap: 12px; justify-content: flex-end; }
+.gap { font-weight: 500; min-width: 3.2em; }
+.gap.low { color: var(--below); }
+.gap.high { color: var(--above); }
+/* tick = state median, dot = this practice */
+.gauge { position: relative; width: 72px; height: 12px; flex: none; color: var(--muted); }
+.gauge::before { content: ""; position: absolute; left: 0; right: 0; top: 5.5px; height: 1px; background: var(--line); }
+.gauge::after { content: ""; position: absolute; left: 50%; top: 1px; width: 1px; height: 10px; background: var(--muted); }
+.gauge i { position: absolute; top: 2.5px; width: 7px; height: 7px; margin-left: -3.5px; border-radius: 50%; background: currentColor; }
+.gauge.low { color: var(--below); }
+.gauge.high { color: var(--above); }
+.na { color: var(--muted); font-size: 0.82rem; }
+.pill { font-size: 0.76rem; padding: 2px 9px; border-radius: 999px; background: var(--soft); color: var(--muted); white-space: nowrap; }
+.pill.check { background: var(--below-soft); color: var(--below); }
+.filters { display: flex; flex-wrap: wrap; gap: 8px; align-items: center; }
+.camp-sum { display: flex; flex-wrap: wrap; gap: 6px 10px; align-items: baseline; }
+.camp-sum .big { font-family: var(--f-serif); font-weight: 400; font-size: 3rem; line-height: 1; letter-spacing: -0.02em; }
+.camp-sum span { color: var(--muted); }
+tr.pick { cursor: pointer; }
+tr.pick td { transition: background 0.12s; }
+tr.pick:hover td, tr.pick:focus-visible td { background: var(--hover); }
+tr.pick:focus-visible { outline: none; }
+td .tin { display: block; color: var(--muted); font-size: 0.8rem; font-variant-numeric: tabular-nums; }
+.more { justify-self: start; }
+.status { color: var(--muted); padding: 28px 0; }
+
+.foot { margin-top: 72px; }
+body.home .foot { margin-top: 40px; }
+body.home .foot .scene { display: none; }
+.src { display: flex; flex-wrap: wrap; gap: 2px 20px; color: var(--muted); font-size: 0.82rem; font-variant-numeric: tabular-nums; padding-bottom: 18px; }
+.src b { color: var(--ink); font-weight: 500; }
+
+@media (max-width: 700px) {
+  .tabs { gap: 14px; }
+  .tabs button { font-size: 0.82rem; }
+  body.home .intro { grid-template-columns: minmax(0, 1fr); padding-top: 22px; }
+  .email { padding: 18px; }
+  .c-place, .c-peers, .c-net, .gauge { display: none; }
+  table { font-size: 0.84rem; }
+  td, th { padding-left: 5px; padding-right: 5px; }
+  th { white-space: normal; }
+  .gap { min-width: 0; }
+  .scene.low { height: 120px; }
+}
+@media (prefers-reduced-motion: no-preference) {
+  .sheet { animation: rise 0.35s ease-out; }
+  @keyframes rise { from { transform: translateY(8px); opacity: 0; } }
+}
+
+/* Office view */
+.sheet h2 { font-family: var(--f-serif); font-weight: 400; font-size: clamp(1.9rem, 4vw, 2.7rem); line-height: 1.05; letter-spacing: -0.02em; margin: 0 0 10px; text-wrap: balance; }
+.sheet .facts { display: block; }
+.lede { color: var(--muted); font-size: 0.98rem; margin: 10px 0 0; max-width: 46ch; }
+body:not(.home) .lede { display: none; }
+.answer { display: flex; flex-wrap: wrap; justify-content: space-between; gap: 18px 40px; align-items: flex-end; }
+.answer p { margin: 0; font-family: var(--f-serif); font-size: clamp(1.35rem, 2.6vw, 1.8rem); line-height: 1.25; letter-spacing: -0.01em; max-width: 30ch; text-wrap: pretty; }
+.answer p b { font-weight: 500; color: var(--below); }
+.answer.ok p b { color: var(--above); }
+.cta { display: flex; flex-wrap: wrap; justify-content: space-between; gap: 16px 32px; align-items: center; border: 1px solid var(--line); border-radius: 14px; padding: 24px; }
+.cta h3 { font-family: var(--f-serif); font-weight: 400; font-size: 1.5rem; letter-spacing: -0.01em; margin: 0 0 6px; }
+.cta p { margin: 0; color: var(--muted); max-width: 58ch; }
+a.btn { display: inline-flex; align-items: center; gap: 8px; text-decoration: none; padding: 11px 18px; white-space: nowrap; }
+.note { color: var(--muted); font-size: 0.8rem; margin: 0; }
+</style>
+<div class="page">
+<nav class="nav">
+  <div class="brand"><svg width="16" height="16" viewBox="0 0 16 16" fill="none" aria-hidden="true"><circle cx="8" cy="8" r="6.5" stroke="currentColor" stroke-width="1.3"/><path d="M1.5 8h13" stroke="currentColor" stroke-width="1.3"/><circle cx="8" cy="8" r="1.8" fill="currentColor"/></svg><span>Payor Rate Check</span></div>
+</nav>
+
+<div class="scene hero" aria-hidden="true">
+  <div class="art"></div>
+  <div class="balloon"><svg viewBox="0 0 34 48" fill="none" stroke="currentColor" stroke-width="1" stroke-linecap="round"><path class="skin" d="M17 1C8 1 2 7.5 2 15.5c0 8 8 13 11.5 19.5h7C24 28.5 32 23.5 32 15.5 32 7.5 26 1 17 1Z"/><path d="M17 1c-4 4-5.5 9-5.5 14.5S14 30 15 35M17 1c4 4 5.5 9 5.5 14.5S20 30 19 35M17 1v34M2.2 14h29.6M13.5 35l1 6M20.5 35l-1 6"/><rect class="skin" x="13.5" y="41" width="7" height="5.5" rx="1"/></svg></div>
+</div>
+
+<div class="intro">
+  <div><h1>Is UHC paying you less than practices like yours?</h1>
+    <p class="lede">Your published UnitedHealthcare rates next to the typical rate for your specialty in your state.</p></div>
+  <div id="view-look">
+  <div class="search">
+    <input id="q" type="search" autocomplete="off" spellcheck="false" placeholder="Your practice name, NPI or tax ID" aria-label="Your practice name, NPI or tax ID" aria-controls="results">
+    <button class="go" id="go" type="button" aria-label="Show my rates"><svg width="14" height="14" viewBox="0 0 16 16" fill="none" aria-hidden="true"><path d="M3 8h9M8.5 4.5 12 8l-3.5 3.5" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"/></svg></button>
+    <div class="results" id="results" role="listbox" hidden></div>
+  </div>
+  </div>
+</div>
+
+<section class="sheet" id="sheet" aria-live="polite" hidden></section>
+
+<footer class="foot">
+  <div class="scene low" aria-hidden="true"><div class="art"></div></div>
+</footer>
+</div>
+
+<script>
+// The landscape. Five ridgelines, each hatched with lines that follow its own crest, the way a banknote
+// engraver shades a hill: line weight carries the tone. Drawn once into a mask; CSS supplies the ink.
+(function scene() {
+  const W = 1600, H = 620, c = document.createElement("canvas");
+  c.width = W; c.height = H;
+  const ctx = c.getContext("2d"), img = ctx.createImageData(W, H), d = img.data;
+  const rnd = (n) => { const s = Math.sin(n * 127.1 + 311.7) * 43758.5453; return s - Math.floor(s); };
+  const n1 = (v, seed) => { const i = Math.floor(v), f = v - i, u = f * f * (3 - 2 * f); return rnd(i + seed) * (1 - u) + rnd(i + 1 + seed) * u; };
+  const fbm = (v, s) => n1(v, s) * 0.55 + n1(v * 2.1, s + 17) * 0.27 + n1(v * 4.3, s + 41) * 0.12 + n1(v * 9.1, s + 73) * 0.06;
+  const L = 5, ridge = [];
+  for (let l = 0; l < L; l++) {
+    const a = new Float32Array(W), base = H * (0.40 + l * 0.125), amp = H * (0.34 - l * 0.045), fr = (4.5 + l * 2.2) / W;
+    for (let i = 0; i < W; i++) {
+      let v = fbm(i * fr + l * 10, l * 100 + 5);
+      if (l < 3) v = Math.pow(1 - Math.abs(2 * v - 1), 1.4);
+      a[i] = base - v * amp;
+    }
+    ridge.push(a);
+  }
+  const at = (a, i) => a[Math.max(0, Math.min(W - 1, Math.round(i)))];
+  const sunX = W * 0.74, sunY = H * 0.2, sunR = 54;
+  for (let y = 0; y < H; y++) for (let x = 0; x < W; x++) {
+    let l = L - 1;
+    while (l >= 0 && y < ridge[l][x]) l--;
+    let alpha = 0;
+    if (l < 0) {
+      const dx = x - sunX, dy = y - sunY, r = Math.sqrt(dx * dx + dy * dy);
+      if (r > sunR + 5) {
+        const sp = 5, row = Math.floor(y / sp);
+        let t = 0.5 * (1 - y / (H * 0.5));
+        t *= 0.45 + 0.9 * n1(x * 0.012 + row * 7.3, 9);
+        if (t > 0.04) alpha = Math.max(0, Math.min(1, t * sp * 0.5 - Math.abs((y / sp - row) - 0.5) * sp + 0.5));
+      } else if (r > sunR) alpha = 1 - Math.abs(r - sunR - 1.2) / 1.2;
+    } else {
+      const a = ridge[l], depth = y - a[x], sp = 4.6 + l * 1.15, sx = x - depth * 0.7;
+      const slope = at(a, sx + 3) - at(a, sx - 3);
+      let t = 0.26 + l * 0.11 + Math.max(-0.3, Math.min(0.4, slope * 0.09));
+      const k = Math.min(1, depth / (H * 0.2));
+      t *= 1 - (l === L - 1 ? 0.35 : 0.8) * k * k * (3 - 2 * k);
+      t = Math.max(0.05, Math.min(0.95, t));
+      const ph = depth / sp;
+      alpha = depth < 1.5 ? 1 : Math.max(0, Math.min(1, t * sp * 0.5 - Math.abs((ph - Math.floor(ph)) - 0.5) * sp + 0.5));
+    }
+    d[(y * W + x) * 4 + 3] = Math.max(0, alpha) * 255;
+  }
+  ctx.putImageData(img, 0, 0);
+  document.documentElement.style.setProperty("--scene", `url(${c.toDataURL("image/png")})`);
+})();
+
+
+const $ = (id) => document.getElementById(id);
+const S = { meta: null, groups: [], byTin: new Map(), shards: {}, hits: [], cursor: -1 };
+const cents = (v) => "$" + v.toLocaleString("en-US", { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+const esc = (s) => String(s).replace(/[&<>"]/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;" }[c]));
+const fmtTin = (t) => t.length === 9 ? t.slice(0, 2) + "-" + t.slice(2) : t;
+const title = (s) => /[a-z]/.test(s) ? s : s.toLowerCase().replace(/(^|[\s\-\/(])([a-z])/g, (m, a, b) => a + b.toUpperCase())
+  .replace(/\b(Md|Pa|Pc|Llc|Pllc|Llp|Lp|Dba|Usa|Ii|Iii)\b/g, (m) => m.toUpperCase());
+const norm = (s) => s.toLowerCase().replace(/&/g, " and ").replace(/orthopaedic/g, "orthopedic")
+  .replace(/[^a-z0-9]+/g, " ").trim().split(" ").filter(Boolean).map((w) => (w.length > 3 && w.endsWith("s") ? w.slice(0, -1) : w));
+const spec = (g) => S.meta.specialties[g.spec];
+const netsOf = (g) => S.meta.networks.map((n, i) => i).filter((i) => g.mask & (1 << i));
+
+async function boot() {
+  try {
+    const res = await fetch("index.json");
+    if (!res.ok) throw new Error(res.status);
+    const data = await res.json();
+    S.meta = data.meta;
+    S.groups = data.groups.map(([tin, name, state, sp, npis, mask, share, aliases, counts, nspec, sum, city]) => ({
+      tin, name: name || "Unnamed practice", state, spec: sp, npis, mask, counts, city: city || "",
+      key: " " + norm([name, aliases].join(" ")).join(" ") + " ",
+    }));
+    S.groups.forEach((g) => S.byTin.set(g.tin, g));
+  } catch (e) {
+    $("sheet").hidden = false;
+    $("sheet").innerHTML = '<div class="status">The rates did not load. Reload the page to try again.</div>';
+    return;
+  }
+  const m = location.hash.match(/^#tin-(\d+)$/);
+  if (m && S.byTin.has(m[1])) show(S.byTin.get(m[1])); else { document.body.classList.add("home"); $("q").focus(); }
+}
+
+async function shard(st) {
+  const k = st || "XX";
+  if (!S.shards[k]) {
+    const res = await fetch(`states/${k}.json`);
+    if (!res.ok) throw new Error(res.status);
+    S.shards[k] = await res.json();
+  }
+  return S.shards[k];
+}
+function defaultNet(g) {
+  let best = netsOf(g)[0], n = -1;
+  netsOf(g).forEach((i) => { if (g.counts[i] > n) { best = i; n = g.counts[i]; } });
+  return best;
+}
+// Same comparison rules as the sales lookup and ratedb.py.
+function rowsFor(g, ni, data) {
+  const sp = spec(g), m = S.meta, held = new Set(m.held || []);
+  return ((data[ni] || {})[g.tin] || []).map(([code, rate, med, peers, rank, vol, mcr, mixed]) => {
+    const gap = med ? (med - rate) / med * 100 : null;
+    const hold = med != null && held.has(`${g.state}|${code}|${ni}`);
+    const surgeon = sp.facility_codes.includes(code);
+    const check = med != null && !hold && (rate < m.flag_pct_of_median / 100 * med || (!surgeon && mcr && rate < m.flag_pct_of_medicare / 100 * mcr) || !!mixed);
+    const compared = med != null && !hold && !check;
+    return { code, desc: sp.codes[code] || code, rate, med, peers, gap, vol: vol || 0, surgeon, compared,
+      below: compared && gap >= m.min_gap_pct, order: sp.code_order.indexOf(code) };
+  }).sort((a, b) => b.compared - a.compared || b.below - a.below || a.order - b.order);
+}
+// UHC visits per Medicare visit: per code where set (Medicare-heavy procedures), else the specialty's.
+const shareOf = (sp, code) => (sp.share_by_code && sp.share_by_code[code]) || sp.uhc_share_of_medicare;
+function annualFor(g, rows) {
+  const v = rows.filter((r) => r.below).reduce((a, r) => a + (r.med - r.rate) * r.vol * shareOf(spec(g), r.code), 0);
+  const step = v < 10000 ? 100 : 1000;
+  return Math.round(v / step) * step;
+}
+const gauge = (r) => `<span class="gauge ${r.below ? "low" : r.gap < 0 ? "high" : ""}" aria-hidden="true"><i style="left:${50 - Math.max(-30, Math.min(30, r.gap)) / 30 * 46}%"></i></span>`;
+
+async function show(g, ni) {
+  if (ni == null) ni = defaultNet(g);
+  document.body.classList.remove("home");
+  $("results").hidden = true;
+  $("sheet").hidden = false;
+  $("sheet").innerHTML = '<div class="status">Loading your rates…</div>';
+  let data;
+  try { data = await shard(g.state); } catch (e) { $("sheet").innerHTML = '<div class="status">Your rates did not load. Try again.</div>'; return; }
+  history.replaceState(null, "", "#tin-" + g.tin);
+  const m = S.meta, sp = spec(g), net = m.networks[ni];
+  const rows = rowsFor(g, ni, data);
+  const compared = rows.filter((r) => r.compared).length, below = rows.filter((r) => r.below).length;
+  const annual = annualFor(g, rows);
+  const where = `${sp.label} practice${g.state ? " in " + esc(g.state) : ""}`;
+  const answer = !compared
+    ? `<div class="answer ok"><p>There aren't enough similar practices on this network to compare your rates yet.</p></div>`
+    : below
+      ? `<div class="answer"><p>On <b>${below} of ${compared}</b> codes we checked, UHC pays you at least ${m.min_gap_pct}% less than the typical ${where}.</p>
+         ${annual > 0 ? `<div class="money"><span class="amt">≈ $${annual.toLocaleString("en-US")}</span><span>a year, if your UHC volume is typical</span></div>` : ""}</div>`
+      : `<div class="answer ok"><p>You're at or near the <b>typical rate</b> for a ${where} on every code we checked.</p></div>`;
+  const nets = netsOf(g);
+  $("sheet").innerHTML = `
+    <div><h2>${esc(title(g.name))}</h2>
+      <div class="facts">${esc(sp.label[0].toUpperCase() + sp.label.slice(1))}${g.city ? " · " + esc(title(g.city)) : ""}${g.state ? ", " + esc(g.state) : ""} · ${g.tin.length === 10 ? "NPI" : "Tax ID"} ${fmtTin(g.tin)}</div></div>
+    ${answer}
+    ${nets.length > 1 ? `<div class="netpick"><label for="net">UHC network</label><select id="net">${nets.map((i) => `<option value="${i}"${i === ni ? " selected" : ""}>${esc(m.networks[i])}</option>`).join("")}</select></div>` : ""}
+    <div class="tablewrap"><table>
+      <thead><tr><th>Code</th><th>Service</th><th class="num">Your rate</th><th class="num">Typical in ${esc(g.state)}</th><th class="num">Difference</th><th class="num c-peers">Practices compared</th></tr></thead>
+      <tbody>${rows.map((r) => `<tr><td class="code">${r.code}</td><td>${esc(r.desc)}${r.surgeon ? ' <span class="na">(surgeon fee)</span>' : ""}</td>
+        <td class="num">${cents(r.rate)}</td>
+        <td class="num">${r.compared ? cents(r.med) : '<span class="na">not compared</span>'}</td>
+        <td class="num">${r.compared ? `<span class="gapcell">${gauge(r)}<span class="gap ${r.below ? "low" : r.gap < 0 ? "high" : ""}">${Math.round(r.gap) === 0 ? "" : r.gap > 0 ? "−" : "+"}${Math.abs(Math.round(r.gap))}%</span></span>` : ""}</td>
+        <td class="num c-peers">${r.compared ? r.peers : ""}</td></tr>`).join("")}</tbody>
+    </table></div>
+    <div class="cta"><div><h3>Want to know what UHC actually paid you?</h3>
+      <p>These are the rates UHC agreed to. RSK checks your remittances for claims paid below even this rate, and helps when your contract comes up for renewal.</p></div>
+      <a class="btn" href="https://www.rsk.com/practices/rsk-health#health-review" target="_blank" rel="noopener">Request a confidential review <span aria-hidden="true">→</span></a></div>
+    <p class="note">From UnitedHealthcare's published negotiated-rate files${m.file_month ? ", " + esc(m.file_month) : ""}. The yearly figure is an estimate at typical UHC volume for a practice your size. Payor Rate Check is run by RSK Health and is not affiliated with UnitedHealthcare.</p>`;
+  const sel = $("net"); if (sel) sel.onchange = (e) => show(g, +e.target.value);
+}
+
+function search() {
+  const raw = $("q").value.trim(), box = $("results");
+  if (!raw) { box.hidden = true; S.hits = []; $("sheet").hidden = true; document.body.classList.add("home"); history.replaceState(null, "", location.pathname + location.search); return; }
+  if (raw.length < 2) { box.hidden = true; return; }
+  const digits = raw.replace(/[\s-]/g, "");
+  let hits;
+  if (/^\d{3,}$/.test(digits)) hits = S.groups.filter((g) => g.tin.startsWith(digits) || (digits.length >= 5 && g.npis.includes(digits)));
+  else { const w = norm(raw); hits = S.groups.filter((g) => w.every((x) => g.key.includes(" " + x))).sort((a, b) => a.name.localeCompare(b.name)); }
+  S.hits = hits.slice(0, 30); S.cursor = -1;
+  box.innerHTML = S.hits.length ? S.hits.map((g, i) => `<button type="button" role="option" data-i="${i}"><span class="nm">${esc(title(g.name))}</span>
+      <span class="tag">${esc(g.city ? title(g.city) + ", " : "")}${esc(g.state)}</span><span class="sub">${esc(spec(g).label)} · ${g.tin.length === 10 ? "NPI" : "Tax ID"} ${fmtTin(g.tin)}</span></button>`).join("")
+    : `<div class="none">We couldn't find "${esc(raw)}". Try your NPI or tax ID.</div>`;
+  box.hidden = false;
+}
+function pick(i) { const g = S.hits[i]; if (!g) return; $("q").value = title(g.name); show(g); }
+$("q").addEventListener("input", search);
+$("q").addEventListener("keydown", (e) => {
+  const btns = [...$("results").querySelectorAll("button")];
+  if (e.key === "ArrowDown" || e.key === "ArrowUp") {
+    e.preventDefault(); if (!btns.length) return;
+    S.cursor = (S.cursor + (e.key === "ArrowDown" ? 1 : -1) + btns.length) % btns.length;
+    btns.forEach((b, i) => b.classList.toggle("on", i === S.cursor)); btns[S.cursor].scrollIntoView({ block: "nearest" });
+  } else if (e.key === "Enter") pick(S.cursor >= 0 ? S.cursor : 0);
+  else if (e.key === "Escape") $("results").hidden = true;
+});
+$("results").addEventListener("click", (e) => { const b = e.target.closest("button[data-i]"); if (b) pick(+b.dataset.i); });
+$("go").addEventListener("click", () => { if (S.hits.length) pick(S.cursor >= 0 ? S.cursor : 0); else $("q").focus(); });
+document.addEventListener("click", (e) => { if (!e.target.closest(".search")) $("results").hidden = true; });
+window.addEventListener("hashchange", () => { const m = location.hash.match(/^#tin-(\d+)$/); if (m && S.byTin.has(m[1])) show(S.byTin.get(m[1])); });
+boot();
+</script>
+
+</html>
