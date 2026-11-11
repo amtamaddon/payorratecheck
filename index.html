@@ -211,7 +211,7 @@ a.btn { display: inline-flex; align-items: center; gap: 8px; text-decoration: no
     <p class="lede">Your published UnitedHealthcare rates next to the typical rate for your specialty in your state.</p></div>
   <div id="view-look">
   <div class="search">
-    <input id="q" type="search" autocomplete="off" spellcheck="false" placeholder="Your practice name, NPI or tax ID" aria-label="Your practice name, NPI or tax ID" aria-controls="results">
+    <input id="q" type="search" autocomplete="off" spellcheck="false" placeholder="Your practice name or NPI" aria-label="Your practice name or NPI" aria-controls="results">
     <button class="go" id="go" type="button" aria-label="Show my rates"><svg width="14" height="14" viewBox="0 0 16 16" fill="none" aria-hidden="true"><path d="M3 8h9M8.5 4.5 12 8l-3.5 3.5" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"/></svg></button>
     <div class="results" id="results" role="listbox" hidden></div>
   </div>
@@ -277,10 +277,9 @@ a.btn { display: inline-flex; align-items: center; gap: 8px; text-decoration: no
 
 
 const $ = (id) => document.getElementById(id);
-const S = { meta: null, groups: [], byTin: new Map(), shards: {}, hits: [], cursor: -1 };
+const S = { meta: null, groups: [], byId: new Map(), shards: {}, hits: [], cursor: -1 };
 const cents = (v) => "$" + v.toLocaleString("en-US", { minimumFractionDigits: 2, maximumFractionDigits: 2 });
 const esc = (s) => String(s).replace(/[&<>"]/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;" }[c]));
-const fmtTin = (t) => t.length === 9 ? t.slice(0, 2) + "-" + t.slice(2) : t;
 const title = (s) => /[a-z]/.test(s) ? s : s.toLowerCase().replace(/(^|[\s\-\/(])([a-z])/g, (m, a, b) => a + b.toUpperCase())
   .replace(/\b(Md|Pa|Pc|Llc|Pllc|Llp|Lp|Dba|Usa|Ii|Iii)\b/g, (m) => m.toUpperCase());
 const norm = (s) => s.toLowerCase().replace(/&/g, " and ").replace(/orthopaedic/g, "orthopedic")
@@ -294,22 +293,37 @@ async function boot() {
     if (!res.ok) throw new Error(res.status);
     const data = await res.json();
     S.meta = data.meta;
-    S.groups = data.groups.map(([tin, name, state, sp, npis, mask, share, aliases, counts, nspec, sum, city]) => ({
-      tin, name: name || "Unnamed practice", state, spec: sp, npis, mask, counts, city: city || "",
+    // Practices are keyed by organization NPI or a practice number; the public files carry no tax IDs.
+    // verified: the practice's verdict holds after the geography check (site gate); otherwise its rates are shown alone.
+    S.groups = data.groups.map(([id, name, state, sp, org, mask, share, aliases, counts, nspec, verified, city]) => ({
+      id, name: name || "Unnamed practice", state, spec: sp, org: org || "", mask, counts, city: city || "",
+      verified: verified === 1,
       key: " " + norm([name, aliases].join(" ")).join(" ") + " ",
     }));
-    S.groups.forEach((g) => S.byTin.set(g.tin, g));
+    S.groups.forEach((g) => S.byId.set(g.id, g));
   } catch (e) {
     $("sheet").hidden = false;
     $("sheet").innerHTML = '<div class="status">The rates did not load. Reload the page to try again.</div>';
     return;
   }
-  const m = location.hash.match(/^#tin-(\d+)$/);
-  if (m && S.byTin.has(m[1])) show(S.byTin.get(m[1])); else { document.body.classList.add("home"); $("q").focus(); }
+  // An outreach link opens on its practice: ?npi=<organization NPI>; a shared result uses #p-<id>.
+  let p = null;
+  try { p = new URLSearchParams(location.search); } catch (e) { /* no query string */ }
+  const npi = p && (p.get("npi") || "").replace(/\D/g, "");
+  // Practice results are for lookup, not search engines: a personal link's page is marked noindex.
+  if (npi || location.hash) {
+    const robots = document.createElement("meta");
+    robots.name = "robots"; robots.content = "noindex";
+    document.head.appendChild(robots);
+  }
+  const m = location.hash.match(/^#p-(\w+)$/);
+  const g = (npi && (S.byId.get(npi) || S.groups.find((x) => x.org === npi))) || (m && S.byId.get(m[1]));
+  if (g) show(g); else { document.body.classList.add("home"); $("q").focus(); }
 }
 
-async function shard(st) {
-  const k = st || "XX";
+// One file per state and bucket of specialties: states/XX-n.json (n is the specialty's shard).
+async function shard(g) {
+  const k = `${g.state || "XX"}-${spec(g).shard || 0}`;
   if (!S.shards[k]) {
     const res = await fetch(`states/${k}.json`);
     if (!res.ok) throw new Error(res.status);
@@ -325,7 +339,7 @@ function defaultNet(g) {
 // Same comparison rules as the sales lookup and ratedb.py.
 function rowsFor(g, ni, data) {
   const sp = spec(g), m = S.meta, held = new Set(m.held || []);
-  return ((data[ni] || {})[g.tin] || []).map(([code, rate, med, peers, rank, vol, mcr, mixed]) => {
+  return ((data[ni] || {})[g.id] || []).map(([code, rate, med, peers, rank, vol, mcr, mixed]) => {
     const gap = med ? (med - rate) / med * 100 : null;
     const hold = med != null && held.has(`${g.state}|${code}|${ni}`);
     const surgeon = sp.facility_codes.includes(code);
@@ -338,7 +352,9 @@ function rowsFor(g, ni, data) {
 // UHC visits per Medicare visit: per code where set (Medicare-heavy procedures), else the specialty's.
 const shareOf = (sp, code) => (sp.share_by_code && sp.share_by_code[code]) || sp.uhc_share_of_medicare;
 function annualFor(g, rows) {
-  const v = rows.filter((r) => r.below).reduce((a, r) => a + (r.med - r.rate) * r.vol * shareOf(spec(g), r.code), 0);
+  // Office codes only where the specialty says so (hospital visits are not office volume).
+  const sp = spec(g);
+  const v = rows.filter((r) => r.below && (!sp.annual_codes || sp.annual_codes.includes(r.code))).reduce((a, r) => a + (r.med - r.rate) * r.vol * shareOf(sp, r.code), 0);
   const step = v < 10000 ? 100 : 1000;
   return Math.round(v / step) * step;
 }
@@ -351,37 +367,44 @@ async function show(g, ni) {
   $("sheet").hidden = false;
   $("sheet").innerHTML = '<div class="status">Loading your rates…</div>';
   let data;
-  try { data = await shard(g.state); } catch (e) { $("sheet").innerHTML = '<div class="status">Your rates did not load. Try again.</div>'; return; }
-  history.replaceState(null, "", "#tin-" + g.tin);
+  try { data = await shard(g); } catch (e) { $("sheet").innerHTML = '<div class="status">Your rates did not load. Try again.</div>'; return; }
+  history.replaceState(null, "", "#p-" + g.id);
   const m = S.meta, sp = spec(g), net = m.networks[ni];
   const rows = rowsFor(g, ni, data);
   const compared = rows.filter((r) => r.compared).length, below = rows.filter((r) => r.below).length;
-  const annual = annualFor(g, rows);
+  // A yearly figure only where its volume ratio was checked (orthopedics, ophthalmology); elsewhere it would be an
+  // assumption shown in public.
+  // Site gate (as for emails): a verdict, peer column and yearly figure only where the comparison holds after the
+  // geography check; otherwise the practice's published rates alone.
+  const gated = !g.verified;
+  const annual = sp.annual_in_email && !gated ? annualFor(g, rows) : 0;
   const where = `${sp.label} practice${g.state ? " in " + esc(g.state) : ""}`;
-  const answer = !compared
+  const answer = gated
+    ? `<div class="answer ok"><p>These are your published UHC rates. We haven't verified a peer comparison for your practice yet; RSK can check them against what UHC actually paid you.</p></div>`
+    : !compared
     ? `<div class="answer ok"><p>There aren't enough similar practices on this network to compare your rates yet.</p></div>`
     : below
       ? `<div class="answer"><p>On <b>${below} of ${compared}</b> codes we checked, UHC pays you at least ${m.min_gap_pct}% less than the typical ${where}.</p>
          ${annual > 0 ? `<div class="money"><span class="amt">≈ $${annual.toLocaleString("en-US")}</span><span>a year, if your UHC volume is typical</span></div>` : ""}</div>`
-      : `<div class="answer ok"><p>You're at or near the <b>typical rate</b> for a ${where} on every code we checked.</p></div>`;
+      : `<div class="answer ok"><p>UHC pays you <b>at or above the typical rate</b> for a ${where} on every code we checked.</p></div>`;
   const nets = netsOf(g);
   $("sheet").innerHTML = `
     <div><h2>${esc(title(g.name))}</h2>
-      <div class="facts">${esc(sp.label[0].toUpperCase() + sp.label.slice(1))}${g.city ? " · " + esc(title(g.city)) : ""}${g.state ? ", " + esc(g.state) : ""} · ${g.tin.length === 10 ? "NPI" : "Tax ID"} ${fmtTin(g.tin)}</div></div>
+      <div class="facts">${esc(sp.label[0].toUpperCase() + sp.label.slice(1))}${g.city ? " · " + esc(title(g.city)) : ""}${g.state ? ", " + esc(g.state) : ""}${g.org ? " · NPI " + esc(g.org) : ""}</div></div>
     ${answer}
     ${nets.length > 1 ? `<div class="netpick"><label for="net">UHC network</label><select id="net">${nets.map((i) => `<option value="${i}"${i === ni ? " selected" : ""}>${esc(m.networks[i])}</option>`).join("")}</select></div>` : ""}
     <div class="tablewrap"><table>
-      <thead><tr><th>Code</th><th>Service</th><th class="num">Your rate</th><th class="num">Typical in ${esc(g.state)}</th><th class="num">Difference</th><th class="num c-peers">Practices compared</th></tr></thead>
-      <tbody>${rows.map((r) => `<tr><td class="code">${r.code}</td><td>${esc(r.desc)}${r.surgeon ? ' <span class="na">(surgeon fee)</span>' : ""}</td>
-        <td class="num">${cents(r.rate)}</td>
+      <thead><tr><th>Code</th><th>Service</th><th class="num">Your rate</th>${gated ? "" : `<th class="num">Typical in ${esc(g.state)}</th><th class="num">Difference</th><th class="num c-peers">Practices compared</th>`}</tr></thead>
+      <tbody>${rows.map((r) => `<tr><td class="code">${r.code}</td><td>${esc(r.desc)}${r.surgeon && !r.code.includes("-") ? ' <span class="na">(surgeon fee)</span>' : ""}</td>
+        <td class="num">${cents(r.rate)}</td>${gated ? "" : `
         <td class="num">${r.compared ? cents(r.med) : '<span class="na">not compared</span>'}</td>
         <td class="num">${r.compared ? `<span class="gapcell">${gauge(r)}<span class="gap ${r.below ? "low" : r.gap < 0 ? "high" : ""}">${Math.round(r.gap) === 0 ? "" : r.gap > 0 ? "−" : "+"}${Math.abs(Math.round(r.gap))}%</span></span>` : ""}</td>
-        <td class="num c-peers">${r.compared ? r.peers : ""}</td></tr>`).join("")}</tbody>
+        <td class="num c-peers">${r.compared ? r.peers : ""}</td>`}</tr>`).join("")}</tbody>
     </table></div>
     <div class="cta"><div><h3>Want to know what UHC actually paid you?</h3>
       <p>These are the rates UHC agreed to. RSK checks your remittances for claims paid below even this rate, and helps when your contract comes up for renewal.</p></div>
       <a class="btn" href="https://www.rsk.com/practices/rsk-health#health-review" target="_blank" rel="noopener">Request a confidential review <span aria-hidden="true">→</span></a></div>
-    <p class="note">From UnitedHealthcare's published negotiated-rate files${m.file_month ? ", " + esc(m.file_month) : ""}. The yearly figure is an estimate at typical UHC volume for a practice your size. Payor Rate Check is run by RSK Health and is not affiliated with UnitedHealthcare.</p>`;
+    <p class="note">From UnitedHealthcare's published negotiated-rate files${m.file_month ? ", " + esc(m.file_month) : ""}. The yearly figure is an estimate at typical UHC volume for a practice your size. Payor Rate Check is run by RSK Health, 200 E. Van Buren St., Suite 600, Phoenix, AZ 85004, and is not affiliated with UnitedHealthcare. To correct or remove a listing, use the review request link above or write to that address.</p>`;
   const sel = $("net"); if (sel) sel.onchange = (e) => show(g, +e.target.value);
 }
 
@@ -391,12 +414,12 @@ function search() {
   if (raw.length < 2) { box.hidden = true; return; }
   const digits = raw.replace(/[\s-]/g, "");
   let hits;
-  if (/^\d{3,}$/.test(digits)) hits = S.groups.filter((g) => g.tin.startsWith(digits) || (digits.length >= 5 && g.npis.includes(digits)));
+  if (/^\d{3,}$/.test(digits)) hits = S.groups.filter((g) => g.org && g.org.startsWith(digits));
   else { const w = norm(raw); hits = S.groups.filter((g) => w.every((x) => g.key.includes(" " + x))).sort((a, b) => a.name.localeCompare(b.name)); }
   S.hits = hits.slice(0, 30); S.cursor = -1;
   box.innerHTML = S.hits.length ? S.hits.map((g, i) => `<button type="button" role="option" data-i="${i}"><span class="nm">${esc(title(g.name))}</span>
-      <span class="tag">${esc(g.city ? title(g.city) + ", " : "")}${esc(g.state)}</span><span class="sub">${esc(spec(g).label)} · ${g.tin.length === 10 ? "NPI" : "Tax ID"} ${fmtTin(g.tin)}</span></button>`).join("")
-    : `<div class="none">We couldn't find "${esc(raw)}". Try your NPI or tax ID.</div>`;
+      <span class="tag">${esc(g.city ? title(g.city) + ", " : "")}${esc(g.state)}</span><span class="sub">${esc(spec(g).label)}${g.org ? " · NPI " + esc(g.org) : ""}</span></button>`).join("")
+    : `<div class="none">We couldn't find "${esc(raw)}". Try your organization NPI.</div>`;
   box.hidden = false;
 }
 function pick(i) { const g = S.hits[i]; if (!g) return; $("q").value = title(g.name); show(g); }
@@ -413,7 +436,7 @@ $("q").addEventListener("keydown", (e) => {
 $("results").addEventListener("click", (e) => { const b = e.target.closest("button[data-i]"); if (b) pick(+b.dataset.i); });
 $("go").addEventListener("click", () => { if (S.hits.length) pick(S.cursor >= 0 ? S.cursor : 0); else $("q").focus(); });
 document.addEventListener("click", (e) => { if (!e.target.closest(".search")) $("results").hidden = true; });
-window.addEventListener("hashchange", () => { const m = location.hash.match(/^#tin-(\d+)$/); if (m && S.byTin.has(m[1])) show(S.byTin.get(m[1])); });
+window.addEventListener("hashchange", () => { const m = location.hash.match(/^#p-(\w+)$/); if (m && S.byId.has(m[1])) show(S.byId.get(m[1])); });
 boot();
 </script>
 

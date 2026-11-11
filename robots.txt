@@ -1,0 +1,5 @@
+User-agent: *
+# Practice results are for lookup only (ratecheckmd.com/?npi=...), not search results.
+Disallow: /states/
+Disallow: /index.json
+Disallow: /*?npi=
