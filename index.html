@@ -607,7 +607,7 @@ async function show(g, ni) {
     <div class="tablewrap"><table>
       <thead><tr><th>Code</th><th>Service</th><th class="num">Your rate</th>${gated ? "" : `<th class="num">Typical in ${esc(g.state)}</th><th class="num">Difference</th><th class="num c-peers">Practices compared</th>`}</tr></thead>
       <tbody>${rows.map((r) => `<tr><td class="code">${r.code}</td><td>${esc(r.desc)}${r.surgeon && !r.code.includes("-") ? ' <span class="na">(surgeon fee)</span>' : ""}</td>
-        <td class="num">${cents(r.rate)}${r.mixed ? '<span class="na lowest">lowest of several published rates</span>' : ""}</td>${gated ? "" : `
+        <td class="num">${cents(r.rate)}${r.mixed ? '<span class="na lowest">one of several published rates</span>' : ""}</td>${gated ? "" : `
         <td class="num">${r.compared ? cents(r.med) : '<span class="na">not compared</span>'}</td>
         <td class="num">${r.compared ? `<span class="gapcell">${gauge(r)}<span class="gap ${r.below ? "low" : r.gap < 0 ? "high" : ""}">${Math.round(r.gap) === 0 ? "" : r.gap > 0 ? "−" : "+"}${Math.abs(Math.round(r.gap))}%</span></span>` : ""}</td>
         <td class="num c-peers">${r.compared ? r.peers : ""}</td>`}</tr>`).join("")}</tbody>
