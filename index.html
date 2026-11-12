@@ -136,6 +136,7 @@ body.home .search { max-width: none; }
 .netpick { display: flex; align-items: center; gap: 10px; flex-wrap: wrap; font-size: 0.86rem; color: var(--muted); }
 .netpick b { color: var(--ink); font-weight: 500; }
 .na.lowest { display: block; font-size: 0.72rem; white-space: nowrap; }
+.results .tryp button { display: inline; width: auto; font: inherit; color: var(--art); background: none; border: 0; padding: 0 2px; text-decoration: underline; cursor: pointer; }
 select { font: inherit; font-size: 0.86rem; color: var(--ink); background: var(--soft); border: 1px solid transparent; border-radius: 999px; padding: 7px 12px; cursor: pointer; max-width: 100%; }
 select:focus-visible { outline: 2px solid var(--art); outline-offset: 2px; }
 
@@ -621,6 +622,7 @@ async function show(g, ni) {
   fillAlso(g, tok);
 }
 
+const STOP = new Set(["the", "of", "and", "at", "for", "a", "an", "in", "inc", "llc", "pllc", "pc", "pa", "md", "ltd", "co", "corp"]);
 function search() {
   const raw = $("q").value.trim(), box = $("results");
   if (!raw) { box.hidden = true; S.hits = []; home(); return; }
@@ -632,7 +634,7 @@ function search() {
     return;
   }
   const digits = raw.replace(/[\s-]/g, "");
-  let hits;
+  let hits, closest = false;
   if (/^\d{3,}$/.test(digits)) hits = S.groups.filter((g) => g.org && g.org.startsWith(digits));
   else {
     // Best matches first: the name starts with what was typed (a leading "the" ignored), then those words in that
@@ -644,13 +646,32 @@ function search() {
     const lead = (g) => g.key.replace(/^ the /, " ");
     const rank = (g) => (g.key.startsWith(typed) ? 0 : lead(g).startsWith(phrase) ? 1 : g.key.includes(phrase) ? 2 : 3) * 2
       + (g.reason ? 1 : 0);
-    hits = S.groups.filter((g) => w.every((x) => g.key.includes(" " + x)))
+    // Filler words ("of", "the", "inc"...) need not match; when no name has every other word, the closest names
+    // (most of the words) are offered: "Retina Center of San Diego" finds "Retina San Diego" (Aaron, 2026-11-12).
+    const sig = w.some((x) => !STOP.has(x)) ? w.filter((x) => !STOP.has(x)) : w;
+    hits = S.groups.filter((g) => sig.every((x) => g.key.includes(" " + x)))
       .sort((a, b) => rank(a) - rank(b) || a.name.localeCompare(b.name));
+    if (!hits.length && sig.length > 1) {
+      // A rare word counts for more than a common one: "retina" over "center" or "San Diego".
+      const need = Math.max(2, Math.ceil(sig.length * 0.6)), df = sig.map(() => 0);
+      const found = S.groups.map((g) => { const m = sig.map((x) => g.key.includes(" " + x)); m.forEach((y, i) => { if (y) df[i]++; }); return [g, m]; });
+      const idf = df.map((d) => Math.log((S.groups.length + 1) / (d + 1)));
+      hits = found.filter((p) => p[1].filter(Boolean).length >= need)
+        .map((p) => [p[0], p[1].reduce((t, y, i) => t + (y ? idf[i] : 0), 0)])
+        .sort((a, b) => b[1] - a[1] || rank(a[0]) - rank(b[0]) || a[0].name.localeCompare(b[0].name)).map((p) => p[0]);
+      closest = hits.length > 0;
+    }
   }
   S.hits = hits.slice(0, 30); S.cursor = -1;
-  box.innerHTML = S.hits.length ? S.hits.map((g, i) => `<button type="button" role="option" data-i="${i}"><span class="nm">${esc(title(g.name))}</span>
+  // Not here, or only near misses: offer the other payers' files, where the practice may be (Aaron, 2026-11-12:
+  // San Diego retina practices are in Anthem's files, not UHC's).
+  const others = S.payers.filter((p) => p !== S.p);
+  const tryOthers = (!S.hits.length || closest) && others.length ? `<div class="none tryp">Not finding it? Search ${
+    others.map((p) => `<button type="button" data-try="${esc(p.key)}">${esc(p.label)}</button>`).join(" · ")}</div>` : "";
+  box.innerHTML = (closest ? `<div class="none">No exact match for "${esc(raw)}". Closest names:</div>` : "") +
+    (S.hits.length ? S.hits.map((g, i) => `<button type="button" role="option" data-i="${i}"><span class="nm">${esc(title(g.name))}</span>
       <span class="tag">${esc(g.city ? title(g.city) + ", " : "")}${esc(g.state)}</span><span class="sub">${esc(spec(g).label)}${g.org ? " · NPI " + esc(g.org) : ""}</span></button>`).join("")
-    : `<div class="none">We couldn't find "${esc(raw)}" in ${esc(poss(S.p.label))} published rates. Try your organization NPI.</div>`;
+    : `<div class="none">We couldn't find "${esc(raw)}" in ${esc(poss(S.p.label))} published rates. Try your organization NPI.</div>`) + tryOthers;
   box.hidden = false;
 }
 function pick(i) { const g = S.hits[i]; if (!g) return; $("q").value = title(g.name); show(g); }
@@ -664,7 +685,10 @@ $("q").addEventListener("keydown", (e) => {
   } else if (e.key === "Enter") pick(S.cursor >= 0 ? S.cursor : 0);
   else if (e.key === "Escape") $("results").hidden = true;
 });
-$("results").addEventListener("click", (e) => { const b = e.target.closest("button[data-i]"); if (b) pick(+b.dataset.i); });
+$("results").addEventListener("click", (e) => {
+  const b = e.target.closest("button[data-i]"); if (b) pick(+b.dataset.i);
+  const t = e.target.closest("button[data-try]"); if (t) switchPayer(t.dataset.try);
+});
 $("go").addEventListener("click", () => { if (S.hits.length) pick(S.cursor >= 0 ? S.cursor : 0); else $("q").focus(); });
 // The picker is a radio group (arrow keys move through it); a short pause lets arrowing past a payer skip its download.
 let pend;
