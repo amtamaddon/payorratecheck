@@ -587,6 +587,10 @@ async function show(g, ni) {
     : below
       ? `<div class="answer"><p>On <b>${below} of ${compared}</b> codes we checked, ${esc(U)} pays you at least ${m.min_gap_pct}% less than the typical ${where}.</p>
          ${annual > 0 ? `<div class="money"><span class="amt">≈ $${annual.toLocaleString("en-US")}</span><span>a year, if your ${esc(U)} volume is typical</span></div>` : ""}</div>`
+      // A code under 10% below is not "below", but the sentence must not say "at or above" while a row shows -4%
+      // (BCBS audit, 2026-11-12).
+      : rows.some((r) => r.compared && r.gap >= 0.5)
+      ? `<div class="answer ok"><p>${esc(U)} pays you <b>within ${m.min_gap_pct}% of the typical rate, or above it,</b> for ${art(sp.label)} ${where} on every code we checked.</p></div>`
       : `<div class="answer ok"><p>${esc(U)} pays you <b>at or above the typical rate</b> for ${art(sp.label)} ${where} on every code we checked.</p></div>`;
   const nets = netsOf(g);
   $("sheet").innerHTML = `
@@ -608,7 +612,7 @@ async function show(g, ni) {
       <p>These are the rates ${esc(U)} agreed to. RSK checks your remittances for claims paid below even this rate, and helps when your contract comes up for renewal.</p></div>
       <a class="btn" href="https://www.rsk.com/practices/rsk-health#health-review" target="_blank" rel="noopener">Request a confidential review <span aria-hidden="true">→</span></a></div>
     ${g.note ? `<p class="note">${esc(g.note)}</p>` : ""}
-    <p class="note">From ${esc(poss(L))} published negotiated-rate files${m.file_month ? ", " + esc(m.file_month) : ""}. The yearly figure is an estimate at typical ${esc(U)} volume for a practice your size. Payor Rate Check is run by RSK Health, 200 E. Van Buren St., Suite 600, Phoenix, AZ 85004, and is not affiliated with ${esc(L)}. To correct or remove a listing, use the review request link above or write to that address.</p>`;
+    <p class="note">From ${esc(poss(L))} published negotiated-rate files${m.file_month ? ", " + esc(m.file_month) : ""}.${annual > 0 ? ` The yearly figure is an estimate at typical ${esc(U)} volume for a practice your size.` : ""} Payor Rate Check is run by RSK Health, 200 E. Van Buren St., Suite 600, Phoenix, AZ 85004, and is not affiliated with ${esc(L)}. To correct or remove a listing, use the review request link above or write to that address.</p>`;
   const sel = $("net"); if (sel) sel.onchange = (e) => show(g, +e.target.value);
   fillAlso(g, tok);
 }
