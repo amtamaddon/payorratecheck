@@ -358,7 +358,8 @@ function load(P) {
       id, name: name || "Unnamed practice", state, spec: sp, org: org || "", mask, counts: counts || [], city: city || "",
       verified: verified === 1, reason: (typeof reason === "number" ? (data.meta.reasons || [])[reason] : reason) || "", note: note || "",
       also: Array.isArray(also) ? also : also ? String(also).split("|") : [],
-      key: " " + norm([name, aliases].join(" ")).join(" ") + " ",
+      key: " " + norm([name, aliases].join(" ")).join(" ") + " ", nkey: " " + norm(name || "").join(" ") + " ",
+      aka: String(aliases || "").split("|").filter(Boolean),
     }));
     d.groups.forEach((g) => {
       d.byId.set(g.id, g);
@@ -626,6 +627,13 @@ async function show(g, ni) {
   fillAlso(g, tok);
 }
 
+// A result found through another name the payer or the NPI registry uses ("Virginia Eye Institute Inc" for Eye
+// Surgeons of Richmond, Inc.) says so, or it looks like a miss (Aaron, 2026-11-12).
+function viaAlias(g, sig) {
+  if (!sig.length || sig.every((x) => g.nkey.includes(" " + x))) return "";
+  const a = g.aka.find((n) => { const k = " " + norm(n).join(" ") + " "; return sig.every((x) => k.includes(" " + x)); });
+  return a ? ` · also listed as ${esc(title(a))}` : "";
+}
 const STOP = new Set(["the", "of", "and", "at", "for", "a", "an", "in", "inc", "llc", "pllc", "pc", "pa", "md", "ltd", "co", "corp"]);
 function search() {
   const raw = $("q").value.trim(), box = $("results");
@@ -638,7 +646,7 @@ function search() {
     return;
   }
   const digits = raw.replace(/[\s-]/g, "");
-  let hits, closest = false;
+  let hits, closest = false, sigUsed = [];
   if (/^\d{3,}$/.test(digits)) hits = S.groups.filter((g) => g.org && g.org.startsWith(digits));
   else {
     // Best matches first: the name starts with what was typed (a leading "the" ignored), then those words in that
@@ -653,6 +661,7 @@ function search() {
     // Filler words ("of", "the", "inc"...) need not match; when no name has every other word, the closest names
     // (most of the words) are offered: "Retina Center of San Diego" finds "Retina San Diego" (Aaron, 2026-11-12).
     const sig = w.some((x) => !STOP.has(x)) ? w.filter((x) => !STOP.has(x)) : w;
+    sigUsed = sig;
     hits = S.groups.filter((g) => sig.every((x) => g.key.includes(" " + x)))
       .sort((a, b) => rank(a) - rank(b) || a.name.localeCompare(b.name));
     if (!hits.length && sig.length > 1) {
@@ -674,7 +683,7 @@ function search() {
     others.map((p) => `<button type="button" data-try="${esc(p.key)}">${esc(p.label)}</button>`).join(" · ")}</div>` : "";
   box.innerHTML = (closest ? `<div class="none">No exact match for "${esc(raw)}". Closest names:</div>` : "") +
     (S.hits.length ? S.hits.map((g, i) => `<button type="button" role="option" data-i="${i}"><span class="nm">${esc(title(g.name))}</span>
-      <span class="tag">${esc(g.city ? title(g.city) + ", " : "")}${esc(g.state)}</span><span class="sub">${esc(spec(g).label)}${g.org ? " · NPI " + esc(g.org) : ""}</span></button>`).join("")
+      <span class="tag">${esc(g.city ? title(g.city) + ", " : "")}${esc(g.state)}</span><span class="sub">${esc(spec(g).label)}${g.org ? " · NPI " + esc(g.org) : ""}${viaAlias(g, sigUsed)}</span></button>`).join("")
     : `<div class="none">We couldn't find "${esc(raw)}" in ${esc(poss(S.p.label))} published rates. Try your organization NPI.</div>`) + tryOthers;
   box.hidden = false;
 }
