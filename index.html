@@ -625,9 +625,13 @@ function search() {
   else {
     // Best matches first: the name starts with what was typed (a leading "the" ignored), then those words in that
     // order anywhere, then the rest; compared practices before listed-only groups; then by name.
+    // A name that starts with exactly what was typed ("the nephrology group") comes before one that matches only
+    // without the "the" (Nephrology Group Consultants).
+    const typed = " " + norm(raw).join(" ") + " ";
     const w = norm(raw).filter((x, i) => !(i === 0 && x === "the")), phrase = " " + w.join(" ") + " ";
     const lead = (g) => g.key.replace(/^ the /, " ");
-    const rank = (g) => (lead(g).startsWith(phrase) ? 0 : g.key.includes(phrase) ? 1 : 2) * 2 + (g.reason ? 1 : 0);
+    const rank = (g) => (g.key.startsWith(typed) ? 0 : lead(g).startsWith(phrase) ? 1 : g.key.includes(phrase) ? 2 : 3) * 2
+      + (g.reason ? 1 : 0);
     hits = S.groups.filter((g) => w.every((x) => g.key.includes(" " + x)))
       .sort((a, b) => rank(a) - rank(b) || a.name.localeCompare(b.name));
   }
