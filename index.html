@@ -85,13 +85,24 @@ body.home .search { max-width: none; }
 .results .sub { grid-column: 1 / -1; color: var(--muted); font-size: 0.8rem; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .results .sub b { font-weight: 400; font-variant-numeric: tabular-nums; }
 .results .none { padding: 10px 12px; color: var(--muted); }
+/* Payer picker: a quiet segmented control over the search; the search, the verdict and every note follow it */
+.payers { display: flex; align-items: center; flex-wrap: wrap; gap: 6px 12px; font-size: 0.86rem; color: var(--muted); }
+.payers[hidden] { display: none; }
+.seg { display: inline-flex; gap: 2px; padding: 3px; border-radius: 999px; background: var(--soft); max-width: 100%; overflow-x: auto; scrollbar-width: none; }
+.seg label { position: relative; flex: none; }
+.seg input { position: absolute; inset: 0; width: 100%; height: 100%; margin: 0; opacity: 0; cursor: pointer; }
+.seg .opt { display: block; padding: 6px 14px; border-radius: 999px; color: var(--muted); font-weight: 500; white-space: nowrap; transition: color 0.15s, background 0.15s, box-shadow 0.15s; }
+.seg label:hover .opt { color: var(--ink); }
+.seg input:checked + .opt { background: var(--bg); color: var(--ink); box-shadow: 0 1px 2px rgba(0, 0, 0, 0.08), 0 0 0 1px var(--line); }
+.seg input:focus-visible + .opt { outline: 2px solid var(--art); outline-offset: -2px; }
+.vh { position: absolute; width: 1px; height: 1px; overflow: hidden; clip-path: inset(50%); white-space: nowrap; }
 .chip { font-size: 0.74rem; font-weight: 500; padding: 1px 7px; border-radius: 999px; font-variant-numeric: tabular-nums; }
 .chip.low { background: var(--below-soft); color: var(--below); }
 .chip.high { background: var(--above-soft); color: var(--above); }
 .chip.even { background: var(--soft); color: var(--muted); }
 
 /* The rate sheet: no card, only rules */
-#view-look { display: grid; gap: 28px; min-width: 0; }
+#view-look { display: grid; gap: 12px; min-width: 0; }
 .sheet { display: grid; gap: 28px; min-width: 0; border-top: 1px solid var(--line); padding-top: 30px; }
 #view-camp { border-top: 0; padding-top: 12px; }
 .ghead { display: flex; flex-wrap: wrap; justify-content: space-between; gap: 18px 40px; align-items: flex-end; }
@@ -100,6 +111,14 @@ body.home .search { max-width: none; }
 .facts { display: flex; flex-wrap: wrap; gap: 2px 18px; color: var(--muted); font-size: 0.88rem; }
 .facts b { color: var(--ink); font-weight: 500; }
 .facts .mono { font-variant-numeric: tabular-nums; }
+.sheet h2:focus { outline: none; }
+/* The same practice in another payer's files */
+.also { display: flex; flex-wrap: wrap; gap: 4px 20px; margin-top: 10px; font-size: 0.88rem; }
+.sheet > .also { margin-top: 0; }
+.also[hidden] { display: none; }
+.also a { color: var(--art); font-weight: 500; text-decoration: underline 1px color-mix(in srgb, var(--art) 35%, transparent); text-underline-offset: 4px; }
+.also a:hover { text-decoration-color: currentColor; }
+.also a:focus-visible { outline: 2px solid var(--art); outline-offset: 3px; border-radius: 2px; }
 .badges { display: flex; gap: 14px 36px; align-items: flex-end; flex-wrap: wrap; }
 .money { display: grid; line-height: 1.15; }
 .money .amt { font-family: var(--f-serif); font-size: 2.5rem; letter-spacing: -0.02em; line-height: 1; }
@@ -163,6 +182,7 @@ body.home .foot { margin-top: 40px; }
 body.home .foot .scene { display: none; }
 .src { display: flex; flex-wrap: wrap; gap: 2px 20px; color: var(--muted); font-size: 0.82rem; font-variant-numeric: tabular-nums; padding-bottom: 18px; }
 .src b { color: var(--ink); font-weight: 500; }
+body:not(.home) .src { display: none; }
 
 @media (max-width: 700px) {
   .tabs { gap: 14px; }
@@ -207,9 +227,10 @@ a.btn { display: inline-flex; align-items: center; gap: 8px; text-decoration: no
 </div>
 
 <div class="intro">
-  <div><h1>Is UHC paying you less than practices like yours?</h1>
-    <p class="lede">Your published UnitedHealthcare rates next to the typical rate for your specialty in your state.</p></div>
+  <div><h1 id="hl">Is UHC paying you less than practices like yours?</h1>
+    <p class="lede" id="lede">Your published UnitedHealthcare rates next to the typical rate for your specialty in your state.</p></div>
   <div id="view-look">
+  <div class="payers" id="payers" role="radiogroup" aria-labelledby="payers-l" hidden><span id="payers-l">Rates from</span><div class="seg" id="seg"></div></div>
   <div class="search">
     <input id="q" type="search" autocomplete="off" spellcheck="false" placeholder="Your practice name or NPI" aria-label="Your practice name or NPI" aria-controls="results">
     <button class="go" id="go" type="button" aria-label="Show my rates"><svg width="14" height="14" viewBox="0 0 16 16" fill="none" aria-hidden="true"><path d="M3 8h9M8.5 4.5 12 8l-3.5 3.5" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"/></svg></button>
@@ -222,6 +243,7 @@ a.btn { display: inline-flex; align-items: center; gap: 8px; text-decoration: no
 
 <footer class="foot">
   <div class="scene low" aria-hidden="true"><div class="art"></div></div>
+  <div class="src" id="src"></div>
 </footer>
 </div>
 
@@ -277,7 +299,21 @@ a.btn { display: inline-flex; align-items: center; gap: 8px; text-decoration: no
 
 
 const $ = (id) => document.getElementById(id);
-const S = { meta: null, groups: [], byId: new Map(), shards: {}, hits: [], cursor: -1 };
+/* One page, several payers. Each payer's published rates are one export in a folder of its own:
+     payers.json                      [{key, label, short, file_month, practices, path?}, ...]
+                                      key is [a-z0-9_-]; the default payer is "uhc", else the first entry;
+                                      path (optional) is the payer's folder, "payers/<key>/" when absent.
+     <folder>index.json               {meta: {payer, networks, specialties, file_month, also?, ...},
+                                       groups: [[id, name, state, spec, org, mask, share, aliases, counts, nspec, verified,
+                                                 city, reason?, note?, also?], ...]}
+     <folder>states/<ST>-<shard>.json {<network index>: {<group id>: [[code, rate, median, peers, rank, vol, medicare, mixed], ...]}}
+   mask: the practice's networks, a bitmask over meta.networks or a list of their indexes (a Blue plan may have many).
+   also: the other payers' keys that list the same organization NPI; read when meta.also is true, otherwise the other
+   payers' indexes are fetched in the background to find it.
+   Without payers.json the page reads ./index.json and ./states/ as UnitedHealthcare (the single-payer deploy). */
+// p: the chosen payer; d: its loaded index (null while it loads); meta, groups and byId are d's.
+const S = { payers: [], def: null, p: null, d: null, err: false, ready: {}, loading: {},
+  meta: null, groups: [], byId: new Map(), cur: null, hits: [], cursor: -1, tok: 0 };
 const cents = (v) => "$" + v.toLocaleString("en-US", { minimumFractionDigits: 2, maximumFractionDigits: 2 });
 const esc = (s) => String(s).replace(/[&<>"]/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;" }[c]));
 const title = (s) => /[a-z]/.test(s) ? s : s.toLowerCase().replace(/(^|[\s\-\/(])([a-z])/g, (m, a, b) => a + b.toUpperCase())
@@ -285,33 +321,110 @@ const title = (s) => /[a-z]/.test(s) ? s : s.toLowerCase().replace(/(^|[\s\-\/(]
 const norm = (s) => s.toLowerCase().replace(/&/g, " and ").replace(/orthopaedic/g, "orthopedic")
   .replace(/[^a-z0-9]+/g, " ").trim().split(" ").filter(Boolean).map((w) => (w.length > 3 && w.endsWith("s") ? w.slice(0, -1) : w));
 const spec = (g) => S.meta.specialties[g.spec];
-const netsOf = (g) => S.meta.networks.map((n, i) => i).filter((i) => g.mask & (1 << i));
+const netsOf = (g) => Array.isArray(g.mask) ? g.mask.slice()
+  : S.meta.networks.map((n, i) => i).filter((i) => Math.floor(g.mask / 2 ** i) % 2 === 1);
+const poss = (s) => s + (/s$/i.test(s) ? "'" : "'s");
+// The same organization in a payer's file: its compared listing first.
+const byOrg = (d, org) => { const a = org && d.byOrg.get(org); return a ? a.find((g) => !g.reason) || a[0] : null; };
 
-async function boot() {
-  try {
-    const res = await fetch("index.json");
+function load(P) {
+  if (!S.loading[P.key]) S.loading[P.key] = fetch(P.base + "index.json").then((res) => {
     if (!res.ok) throw new Error(res.status);
-    const data = await res.json();
-    S.meta = data.meta;
+    return res.json();
+  }).then((data) => {
     // Practices are keyed by organization NPI or a practice number; the public files carry no tax IDs.
     // verified: the practice's verdict holds after the geography check (site gate); otherwise its rates are shown alone.
     // reason: a group listed without a comparison (a hospital's staff, a multi-state platform, mixed specialties...).
     // note: why a compared practice's state was chosen (e.g. its organization NPI's state, for remote readers).
-    S.groups = data.groups.map(([id, name, state, sp, org, mask, share, aliases, counts, nspec, verified, city, reason, note]) => ({
-      id, name: name || "Unnamed practice", state, spec: sp, org: org || "", mask, counts, city: city || "",
+    const d = { meta: data.meta, shards: {}, byId: new Map(), byOrg: new Map() };
+    d.groups = data.groups.map(([id, name, state, sp, org, mask, share, aliases, counts, nspec, verified, city, reason, note, also]) => ({
+      id, name: name || "Unnamed practice", state, spec: sp, org: org || "", mask, counts: counts || [], city: city || "",
       verified: verified === 1, reason: reason || "", note: note || "",
+      also: Array.isArray(also) ? also : also ? String(also).split("|") : [],
       key: " " + norm([name, aliases].join(" ")).join(" ") + " ",
     }));
-    S.groups.forEach((g) => S.byId.set(g.id, g));
-  } catch (e) {
+    d.groups.forEach((g) => {
+      d.byId.set(g.id, g);
+      if (g.org) { if (!d.byOrg.has(g.org)) d.byOrg.set(g.org, []); d.byOrg.get(g.org).push(g); }
+    });
+    if (P.legacy && d.meta.payer) P.label = d.meta.payer;
+    return (S.ready[P.key] = d);
+  }).catch((e) => { delete S.loading[P.key]; throw e; });
+  return S.loading[P.key];
+}
+
+// Choose a payer: its wording at once, its index when loaded. Resolves to its data, or null if another was chosen meanwhile.
+async function setPayer(P) {
+  S.p = P; S.err = false;
+  if (S.ready[P.key]) use(S.ready[P.key]); else S.d = null;
+  paint();
+  let d;
+  try { d = await load(P); } catch (e) { if (S.p === P) S.err = true; throw e; }
+  if (S.p !== P) return null;
+  use(d); paint();
+  return d;
+}
+function use(d) { S.d = d; S.meta = d.meta; S.groups = d.groups; S.byId = d.byId; }
+
+function renderPicker() {
+  $("payers").hidden = S.payers.length < 2;
+  $("seg").innerHTML = S.payers.map((p) => `<label><input type="radio" name="payer" value="${esc(p.key)}"><span class="opt">${esc(p.short)}${
+    p.short !== p.label ? `<span class="vh"> (${esc(p.label)})</span>` : ""}</span></label>`).join("");
+  const names = S.payers.map((p) => p.label), list = names.length > 1 ? names.slice(0, -1).join(", ") + " and " + names[names.length - 1] : names[0];
+  document.querySelector('meta[name="description"]').content = `See your practice's published ${list} rates next to the typical rate for your specialty in your state.`;
+}
+// Every line that names the payer, from the chosen one.
+function paint() {
+  const P = S.p, d = S.ready[P.key];
+  document.querySelectorAll("#seg input").forEach((i) => { i.checked = i.value === P.key; });
+  $("hl").textContent = `Is ${P.short} paying you less than practices like yours?`;
+  $("lede").textContent = `Your published ${P.label} rates next to the typical rate for your specialty in your state.`;
+  const month = (d && d.meta.file_month) || P.file_month || "", n = +P.practices || (d && d.groups.length) || 0;
+  $("src").innerHTML = `<span><b>${esc(P.label)}</b> published rates${month ? ", " + esc(month) : ""}</span>${
+    n ? `<span>${n.toLocaleString("en-US")} practices</span>` : ""}<span>Run by RSK Health; not affiliated with ${esc(P.label)}</span>`;
+}
+
+// The address names the payer (when not the default) and the practice: ?payer=<key>#p-<id>. An outreach ?npi= stays
+// while its own practice is shown.
+function syncUrl(g) {
+  let q;
+  try { q = new URLSearchParams(location.search); } catch (e) { q = new URLSearchParams(); }
+  if (S.p === S.def) q.delete("payer"); else q.set("payer", S.p.key);
+  const npi = (q.get("npi") || "").replace(/\D/g, "");
+  if (q.has("npi") && !(g && npi && (npi === g.id || npi === g.org))) q.delete("npi");
+  const s = q.toString();
+  history.replaceState(null, "", location.pathname + (s ? "?" + s : "") + (g ? "#p-" + g.id : ""));
+}
+function home() {
+  S.tok++; S.cur = null;
+  $("sheet").hidden = true;
+  document.body.classList.add("home");
+  syncUrl(null);
+}
+
+async function boot() {
+  let list = null;
+  try { const res = await fetch("payers.json"); if (res.ok) list = await res.json(); } catch (e) { /* one payer, at the root */ }
+  if (list && !Array.isArray(list)) list = list.payers;
+  S.payers = (Array.isArray(list) ? list : []).filter((p) => p && /^[a-z0-9_-]+$/.test(p.key || "")).map((p) => {
+    const label = String(p.label || p.key.toUpperCase());
+    const base = p.path != null ? String(p.path).replace(/\/?$/, "/").replace(/^\/$/, "") : `payers/${p.key}/`;
+    return { key: p.key, label, short: String(p.short || label), file_month: p.file_month || "", practices: p.practices || 0, base };
+  });
+  if (!S.payers.length) S.payers = [{ key: "uhc", label: "UnitedHealthcare", short: "UHC", file_month: "", practices: 0, base: "", legacy: true }];
+  S.def = S.payers.find((p) => p.key === "uhc") || S.payers[0];
+  // An outreach link opens on its practice: ?npi=<organization NPI>, with &payer=<key> for another payer than the default;
+  // a shared result uses #p-<id>.
+  let q = null;
+  try { q = new URLSearchParams(location.search); } catch (e) { /* no query string */ }
+  const want = q && (q.get("payer") || "").toLowerCase();
+  renderPicker();
+  try { await setPayer(S.payers.find((p) => p.key === want) || S.def); } catch (e) {
     $("sheet").hidden = false;
     $("sheet").innerHTML = '<div class="status">The rates did not load. Reload the page to try again.</div>';
     return;
   }
-  // An outreach link opens on its practice: ?npi=<organization NPI>; a shared result uses #p-<id>.
-  let p = null;
-  try { p = new URLSearchParams(location.search); } catch (e) { /* no query string */ }
-  const npi = p && (p.get("npi") || "").replace(/\D/g, "");
+  const npi = q && (q.get("npi") || "").replace(/\D/g, "");
   // Practice results are for lookup, not search engines: a personal link's page is marked noindex.
   if (npi || location.hash) {
     const robots = document.createElement("meta");
@@ -319,23 +432,52 @@ async function boot() {
     document.head.appendChild(robots);
   }
   const m = location.hash.match(/^#p-(\w+)$/);
-  const g = (npi && (S.byId.get(npi) || S.groups.find((x) => x.org === npi))) || (m && S.byId.get(m[1]));
+  const g = (npi && (S.byId.get(npi) || byOrg(S.d, npi))) || (m && S.byId.get(m[1]));
   if (g) show(g); else { document.body.classList.add("home"); $("q").focus(); }
 }
 
-// One file per state and bucket of specialties: states/XX-n.json (n is the specialty's shard).
-async function shard(g) {
-  const k = `${g.state || "XX"}-${spec(g).shard || 0}`;
-  if (!S.shards[k]) {
-    const res = await fetch(`states/${k}.json`);
-    if (!res.ok) throw new Error(res.status);
-    S.shards[k] = await res.json();
+// Switch payers from the picker or a practice's "see its rates" link: the same practice there when it is listed.
+async function switchPayer(key, focus) {
+  const P = S.payers.find((p) => p.key === key);
+  if (!P || P === S.p) return;
+  const was = S.cur, tok = ++S.tok;
+  S.cur = null;
+  if (was) { $("sheet").hidden = false; $("sheet").innerHTML = `<div class="status">Loading ${esc(P.label)} rates…</div>`; }
+  const loading = setPayer(P), typed = () => !was && $("q").value.trim();
+  if (typed()) search(); // the new payer's matches, or a loading line until its index arrives
+  let d;
+  try { d = await loading; } catch (e) {
+    if (tok !== S.tok) return;
+    $("sheet").hidden = false;
+    $("sheet").innerHTML = `<div class="status">The ${esc(P.label)} rates did not load. Reload the page to try again.</div>`;
+    if (typed()) search();
+    return;
   }
-  return S.shards[k];
+  if (!d || tok !== S.tok) return;
+  const g = was && byOrg(d, was.org);
+  if (g) {
+    await show(g);
+    const h = S.cur === g && $("sheet").querySelector("h2");
+    if (focus && h) h.focus();
+  } else if (was) {
+    syncUrl(null);
+    $("sheet").innerHTML = `<div class="status">${esc(title(was.name))} isn't in ${esc(poss(P.label))} published rate files. Search above for another practice.</div>`;
+  } else { home(); if (typed()) search(); }
+}
+
+// One file per state and bucket of specialties: <folder>states/XX-n.json (n is the specialty's shard).
+async function shard(g) {
+  const d = S.d, k = `${g.state || "XX"}-${spec(g).shard || 0}`;
+  if (!d.shards[k]) {
+    const res = await fetch(`${S.p.base}states/${k}.json`);
+    if (!res.ok) throw new Error(res.status);
+    d.shards[k] = await res.json();
+  }
+  return d.shards[k];
 }
 function defaultNet(g) {
   let best = netsOf(g)[0], n = -1;
-  netsOf(g).forEach((i) => { if (g.counts[i] > n) { best = i; n = g.counts[i]; } });
+  netsOf(g).forEach((i) => { if ((g.counts[i] || 0) > n) { best = i; n = g.counts[i] || 0; } });
   return best;
 }
 // Same comparison rules as the sales lookup and ratedb.py.
@@ -351,8 +493,8 @@ function rowsFor(g, ni, data) {
       below: compared && gap >= m.min_gap_pct, order: sp.code_order.indexOf(code) };
   }).sort((a, b) => b.compared - a.compared || b.below - a.below || a.order - b.order);
 }
-// UHC visits per Medicare visit: per code where set (Medicare-heavy procedures), else the specialty's.
-const shareOf = (sp, code) => (sp.share_by_code && sp.share_by_code[code]) || sp.uhc_share_of_medicare;
+// The payer's visits per Medicare visit: per code where set (Medicare-heavy procedures), else the specialty's.
+const shareOf = (sp, code) => (sp.share_by_code && sp.share_by_code[code]) || sp.share_of_medicare || sp.uhc_share_of_medicare;
 function annualFor(g, rows) {
   // Office codes only where the specialty says so (hospital visits are not office volume).
   const sp = spec(g);
@@ -362,29 +504,56 @@ function annualFor(g, rows) {
 }
 const gauge = (r) => `<span class="gauge ${r.below ? "low" : r.gap < 0 ? "high" : ""}" aria-hidden="true"><i style="left:${50 - Math.max(-30, Math.min(30, r.gap)) / 30 * 46}%"></i></span>`;
 
+// Other payers that list the same organization NPI, each a link to this practice's rates there.
+const ALSO = '<nav class="also" id="also" aria-label="This practice with other payers" hidden></nav>';
+function fillAlso(g, tok) {
+  const others = S.payers.filter((p) => p !== S.p);
+  if (!g.org || !others.length) return;
+  const yes = new Set(), hinted = !!S.meta.also;
+  const draw = () => {
+    const el = $("also");
+    if (tok !== S.tok || !el) return;
+    const ps = others.filter((p) => yes.has(p.key));
+    el.hidden = !ps.length;
+    el.innerHTML = ps.map((p) => `<a href="?payer=${encodeURIComponent(p.key)}&amp;npi=${encodeURIComponent(g.org)}" data-payer="${esc(p.key)}">See this practice's ${esc(p.label)} rates <span aria-hidden="true">→</span></a>`).join("");
+  };
+  others.forEach((p) => {
+    const d = S.ready[p.key];
+    if (d) { if (byOrg(d, g.org)) yes.add(p.key); }
+    else if (hinted) { if (g.also.includes(p.key)) yes.add(p.key); }
+    else load(p).then((d) => { if (byOrg(d, g.org)) { yes.add(p.key); draw(); } }, () => {});
+  });
+  draw();
+}
+
 async function show(g, ni) {
+  const tok = ++S.tok, U = S.p.short, L = S.p.label;
+  S.cur = g;
   document.body.classList.remove("home");
   $("results").hidden = true;
   $("sheet").hidden = false;
   if (g.reason) {
     // Listed, not compared: every group in the file is listed, and one that can't be compared fairly says why.
-    history.replaceState(null, "", "#p-" + g.id);
+    syncUrl(g);
     const why = g.reason.charAt(0).toUpperCase() + g.reason.slice(1);
-    $("sheet").innerHTML = `<h2>${esc(title(g.name))}</h2>
+    $("sheet").innerHTML = `<h2 tabindex="-1">${esc(title(g.name))}</h2>
       <p class="sub">${esc(g.city ? title(g.city) + ", " : "")}${esc(g.state)} · ${esc(spec(g).label)}${g.org ? " · NPI " + esc(g.org) : ""}</p>
-      <div class="answer"><p>We list every group in UnitedHealthcare's published rate files, but we don't compare this one
+      ${ALSO}
+      <div class="answer"><p>We list every group in ${esc(poss(L))} published rate files, but we don't compare this one
       with independent practices in ${esc(g.state)}, because a side-by-side wouldn't be fair.</p>
       <p><strong>Why:</strong> ${esc(why)}.</p>
-      <p>RSK can still check what UHC actually paid you against your own contract.</p></div>
+      <p>RSK can still check what ${esc(U)} actually paid you against your own contract.</p></div>
       <a class="btn" href="https://www.rsk.com/practices/rsk-health#health-review" target="_blank" rel="noopener">Request a confidential review <span aria-hidden="true">→</span></a>`;
+    fillAlso(g, tok);
     return;
   }
   if (ni == null) ni = defaultNet(g);
   $("sheet").innerHTML = '<div class="status">Loading your rates…</div>';
   let data;
-  try { data = await shard(g); } catch (e) { $("sheet").innerHTML = '<div class="status">Your rates did not load. Try again.</div>'; return; }
-  history.replaceState(null, "", "#p-" + g.id);
-  const m = S.meta, sp = spec(g), net = m.networks[ni];
+  try { data = await shard(g); } catch (e) { if (tok === S.tok) $("sheet").innerHTML = '<div class="status">Your rates did not load. Try again.</div>'; return; }
+  if (tok !== S.tok) return;
+  syncUrl(g);
+  const m = S.meta, sp = spec(g);
   const rows = rowsFor(g, ni, data);
   const compared = rows.filter((r) => r.compared).length, below = rows.filter((r) => r.below).length;
   // A yearly figure only where its volume ratio was checked (orthopedics, ophthalmology); elsewhere it would be an
@@ -395,19 +564,20 @@ async function show(g, ni) {
   const annual = sp.annual_in_email && !gated ? annualFor(g, rows) : 0;
   const where = `${sp.label} practice${g.state ? " in " + esc(g.state) : ""}`;
   const answer = gated
-    ? `<div class="answer ok"><p>These are your published UHC rates. We haven't verified a peer comparison for your practice yet; RSK can check them against what UHC actually paid you.</p></div>`
+    ? `<div class="answer ok"><p>These are your published ${esc(U)} rates. We haven't verified a peer comparison for your practice yet; RSK can check them against what ${esc(U)} actually paid you.</p></div>`
     : !compared
     ? `<div class="answer ok"><p>There aren't enough similar practices on this network to compare your rates yet.</p></div>`
     : below
-      ? `<div class="answer"><p>On <b>${below} of ${compared}</b> codes we checked, UHC pays you at least ${m.min_gap_pct}% less than the typical ${where}.</p>
-         ${annual > 0 ? `<div class="money"><span class="amt">≈ $${annual.toLocaleString("en-US")}</span><span>a year, if your UHC volume is typical</span></div>` : ""}</div>`
-      : `<div class="answer ok"><p>UHC pays you <b>at or above the typical rate</b> for a ${where} on every code we checked.</p></div>`;
+      ? `<div class="answer"><p>On <b>${below} of ${compared}</b> codes we checked, ${esc(U)} pays you at least ${m.min_gap_pct}% less than the typical ${where}.</p>
+         ${annual > 0 ? `<div class="money"><span class="amt">≈ $${annual.toLocaleString("en-US")}</span><span>a year, if your ${esc(U)} volume is typical</span></div>` : ""}</div>`
+      : `<div class="answer ok"><p>${esc(U)} pays you <b>at or above the typical rate</b> for a ${where} on every code we checked.</p></div>`;
   const nets = netsOf(g);
   $("sheet").innerHTML = `
-    <div><h2>${esc(title(g.name))}</h2>
-      <div class="facts">${esc(sp.label[0].toUpperCase() + sp.label.slice(1))}${g.city ? " · " + esc(title(g.city)) : ""}${g.state ? ", " + esc(g.state) : ""}${g.org ? " · NPI " + esc(g.org) : ""}</div></div>
+    <div><h2 tabindex="-1">${esc(title(g.name))}</h2>
+      <div class="facts">${esc(sp.label[0].toUpperCase() + sp.label.slice(1))}${g.city ? " · " + esc(title(g.city)) : ""}${g.state ? ", " + esc(g.state) : ""}${g.org ? " · NPI " + esc(g.org) : ""}</div>
+      ${ALSO}</div>
     ${answer}
-    ${nets.length > 1 ? `<div class="netpick"><label for="net">UHC network</label><select id="net">${nets.map((i) => `<option value="${i}"${i === ni ? " selected" : ""}>${esc(m.networks[i])}</option>`).join("")}</select></div>` : ""}
+    ${nets.length > 1 ? `<div class="netpick"><label for="net">${esc(U)} network</label><select id="net">${nets.map((i) => `<option value="${i}"${i === ni ? " selected" : ""}>${esc(m.networks[i])}</option>`).join("")}</select></div>` : ""}
     <div class="tablewrap"><table>
       <thead><tr><th>Code</th><th>Service</th><th class="num">Your rate</th>${gated ? "" : `<th class="num">Typical in ${esc(g.state)}</th><th class="num">Difference</th><th class="num c-peers">Practices compared</th>`}</tr></thead>
       <tbody>${rows.map((r) => `<tr><td class="code">${r.code}</td><td>${esc(r.desc)}${r.surgeon && !r.code.includes("-") ? ' <span class="na">(surgeon fee)</span>' : ""}</td>
@@ -416,18 +586,25 @@ async function show(g, ni) {
         <td class="num">${r.compared ? `<span class="gapcell">${gauge(r)}<span class="gap ${r.below ? "low" : r.gap < 0 ? "high" : ""}">${Math.round(r.gap) === 0 ? "" : r.gap > 0 ? "−" : "+"}${Math.abs(Math.round(r.gap))}%</span></span>` : ""}</td>
         <td class="num c-peers">${r.compared ? r.peers : ""}</td>`}</tr>`).join("")}</tbody>
     </table></div>
-    <div class="cta"><div><h3>Want to know what UHC actually paid you?</h3>
-      <p>These are the rates UHC agreed to. RSK checks your remittances for claims paid below even this rate, and helps when your contract comes up for renewal.</p></div>
+    <div class="cta"><div><h3>Want to know what ${esc(U)} actually paid you?</h3>
+      <p>These are the rates ${esc(U)} agreed to. RSK checks your remittances for claims paid below even this rate, and helps when your contract comes up for renewal.</p></div>
       <a class="btn" href="https://www.rsk.com/practices/rsk-health#health-review" target="_blank" rel="noopener">Request a confidential review <span aria-hidden="true">→</span></a></div>
     ${g.note ? `<p class="note">${esc(g.note)}</p>` : ""}
-    <p class="note">From UnitedHealthcare's published negotiated-rate files${m.file_month ? ", " + esc(m.file_month) : ""}. The yearly figure is an estimate at typical UHC volume for a practice your size. Payor Rate Check is run by RSK Health, 200 E. Van Buren St., Suite 600, Phoenix, AZ 85004, and is not affiliated with UnitedHealthcare. To correct or remove a listing, use the review request link above or write to that address.</p>`;
+    <p class="note">From ${esc(poss(L))} published negotiated-rate files${m.file_month ? ", " + esc(m.file_month) : ""}. The yearly figure is an estimate at typical ${esc(U)} volume for a practice your size. Payor Rate Check is run by RSK Health, 200 E. Van Buren St., Suite 600, Phoenix, AZ 85004, and is not affiliated with ${esc(L)}. To correct or remove a listing, use the review request link above or write to that address.</p>`;
   const sel = $("net"); if (sel) sel.onchange = (e) => show(g, +e.target.value);
+  fillAlso(g, tok);
 }
 
 function search() {
   const raw = $("q").value.trim(), box = $("results");
-  if (!raw) { box.hidden = true; S.hits = []; $("sheet").hidden = true; document.body.classList.add("home"); history.replaceState(null, "", location.pathname + location.search); return; }
+  if (!raw) { box.hidden = true; S.hits = []; home(); return; }
   if (raw.length < 2) { box.hidden = true; return; }
+  if (!S.d) {
+    S.hits = []; S.cursor = -1;
+    box.innerHTML = `<div class="none">${S.err ? `The ${esc(S.p.label)} rates did not load. Reload the page to try again.` : `Loading ${esc(S.p.label)} rates…`}</div>`;
+    box.hidden = false;
+    return;
+  }
   const digits = raw.replace(/[\s-]/g, "");
   let hits;
   if (/^\d{3,}$/.test(digits)) hits = S.groups.filter((g) => g.org && g.org.startsWith(digits));
@@ -443,7 +620,7 @@ function search() {
   S.hits = hits.slice(0, 30); S.cursor = -1;
   box.innerHTML = S.hits.length ? S.hits.map((g, i) => `<button type="button" role="option" data-i="${i}"><span class="nm">${esc(title(g.name))}</span>
       <span class="tag">${esc(g.city ? title(g.city) + ", " : "")}${esc(g.state)}</span><span class="sub">${esc(spec(g).label)}${g.org ? " · NPI " + esc(g.org) : ""}</span></button>`).join("")
-    : `<div class="none">We couldn't find "${esc(raw)}". Try your organization NPI.</div>`;
+    : `<div class="none">We couldn't find "${esc(raw)}" in ${esc(poss(S.p.label))} published rates. Try your organization NPI.</div>`;
   box.hidden = false;
 }
 function pick(i) { const g = S.hits[i]; if (!g) return; $("q").value = title(g.name); show(g); }
@@ -459,8 +636,16 @@ $("q").addEventListener("keydown", (e) => {
 });
 $("results").addEventListener("click", (e) => { const b = e.target.closest("button[data-i]"); if (b) pick(+b.dataset.i); });
 $("go").addEventListener("click", () => { if (S.hits.length) pick(S.cursor >= 0 ? S.cursor : 0); else $("q").focus(); });
-document.addEventListener("click", (e) => { if (!e.target.closest(".search")) $("results").hidden = true; });
-window.addEventListener("hashchange", () => { const m = location.hash.match(/^#p-(\w+)$/); if (m && S.byId.has(m[1])) show(S.byId.get(m[1])); });
+// The picker is a radio group (arrow keys move through it); a short pause lets arrowing past a payer skip its download.
+let pend;
+$("seg").addEventListener("change", (e) => { clearTimeout(pend); const k = e.target.value; pend = setTimeout(() => switchPayer(k), 150); });
+document.addEventListener("click", (e) => {
+  if (!e.target.closest(".search")) $("results").hidden = true;
+  // A practice's link to its rates with another payer switches in place (a modified click opens the deep link).
+  const a = e.target.closest("a[data-payer]");
+  if (a && !e.button && !e.metaKey && !e.ctrlKey && !e.shiftKey && !e.altKey) { e.preventDefault(); switchPayer(a.dataset.payer, true); }
+});
+window.addEventListener("hashchange", () => { const m = location.hash.match(/^#p-(\w+)$/); if (m && S.d && S.byId.has(m[1])) show(S.byId.get(m[1])); });
 boot();
 </script>
 
