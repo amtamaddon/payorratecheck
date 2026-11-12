@@ -186,9 +186,11 @@ td .tin { display: block; color: var(--muted); font-size: 0.8rem; font-variant-n
 .foot { margin-top: 72px; }
 body.home .foot { margin-top: 40px; }
 body.home .foot .scene { display: none; }
-.src { display: flex; flex-wrap: wrap; gap: 2px 20px; color: var(--muted); font-size: 0.82rem; font-variant-numeric: tabular-nums; padding-bottom: 18px; }
-.src b { color: var(--ink); font-weight: 500; }
-body:not(.home) .src { display: none; }
+/* Under the lede: how much the payer's files cover. Footer: who runs the site, one quiet line. */
+.fine { margin: 14px 0 0; color: var(--muted); font-size: 0.8rem; letter-spacing: 0.01em; font-variant-numeric: tabular-nums; }
+body:not(.home) .fine { display: none; }
+.disc { margin: 0; padding: 16px 0 20px; border-top: 1px solid var(--line); color: var(--muted); font-size: 0.78rem; }
+body:not(.home) .disc { display: none; }
 
 @media (max-width: 700px) {
   .tabs { gap: 14px; }
@@ -234,7 +236,8 @@ a.btn { display: inline-flex; align-items: center; gap: 8px; text-decoration: no
 
 <div class="intro">
   <div><h1 id="hl">Is UHC paying you less than practices like yours?</h1>
-    <p class="lede" id="lede">Your published UnitedHealthcare rates next to the typical rate for your specialty in your state.</p></div>
+    <p class="lede" id="lede">Your published UnitedHealthcare rates next to the typical rate for your specialty in your state.</p>
+    <p class="fine" id="src"></p></div>
   <div id="view-look">
   <div class="payers" id="payers" role="radiogroup" aria-labelledby="payers-l" hidden><span id="payers-l">Rates from</span><div class="seg" id="seg"></div></div>
   <div class="search">
@@ -249,7 +252,7 @@ a.btn { display: inline-flex; align-items: center; gap: 8px; text-decoration: no
 
 <footer class="foot">
   <div class="scene low" aria-hidden="true"><div class="art"></div></div>
-  <div class="src" id="src"></div>
+  <p class="disc" id="disc"></p>
 </footer>
 </div>
 
@@ -389,8 +392,9 @@ function paint() {
   $("hl").textContent = `Is ${P.short} paying you less than practices like yours?`;
   $("lede").textContent = `Your published ${P.label} rates next to the typical rate for your specialty in your state.`;
   const month = (d && d.meta.file_month) || P.file_month || "", n = +P.practices || (d && d.groups.length) || 0;
-  $("src").innerHTML = `<span><b>${esc(P.label)}</b> published rates${month ? ", " + esc(month) : ""}</span>${
-    n ? `<span>${n.toLocaleString("en-US")} practices</span>` : ""}<span>Run by RSK Health; not affiliated with ${esc(P.label)}</span>`;
+  $("src").textContent = [n ? `${n.toLocaleString("en-US")} practices` : "", month ? `${month} rate files` : ""]
+    .filter(Boolean).join(" · ");
+  $("disc").textContent = `Payor Rate Check is run by RSK Health and is not affiliated with ${P.label}.`;
 }
 
 // The address names the payer (when not the default) and the practice: ?payer=<key>#p-<id>. An outreach ?npi= stays
