@@ -135,6 +135,7 @@ body.home .search { max-width: none; }
 .verdict .big { font-family: var(--f-serif); font-size: 2.5rem; line-height: 1; letter-spacing: -0.02em; color: var(--below); }
 .netpick { display: flex; align-items: center; gap: 10px; flex-wrap: wrap; font-size: 0.86rem; color: var(--muted); }
 .netpick b { color: var(--ink); font-weight: 500; }
+.na.lowest { display: block; font-size: 0.72rem; white-space: nowrap; }
 select { font: inherit; font-size: 0.86rem; color: var(--ink); background: var(--soft); border: 1px solid transparent; border-radius: 999px; padding: 7px 12px; cursor: pointer; max-width: 100%; }
 select:focus-visible { outline: 2px solid var(--art); outline-offset: 2px; }
 
@@ -505,7 +506,7 @@ function rowsFor(g, ni, data) {
     const surgeon = sp.facility_codes.includes(code);
     const check = med != null && !hold && (rate < m.flag_pct_of_median / 100 * med || (!surgeon && mcr && rate < m.flag_pct_of_medicare / 100 * mcr) || !!mixed);
     const compared = med != null && !hold && !check;
-    return { code, desc: sp.codes[code] || code, rate, med, peers, gap, vol: vol || 0, surgeon, compared,
+    return { code, desc: sp.codes[code] || code, rate, med, peers, gap, vol: vol || 0, surgeon, compared, mixed: !!mixed,
       below: compared && gap >= m.min_gap_pct, order: sp.code_order.indexOf(code) };
   }).sort((a, b) => b.compared - a.compared || b.below - a.below || a.order - b.order);
 }
@@ -586,7 +587,7 @@ async function show(g, ni) {
   const answer = gated
     ? `<div class="answer ok"><p>These are your published ${esc(U)} rates. We haven't verified a peer comparison for your practice yet; RSK can check them against what ${esc(U)} actually paid you.</p></div>`
     : !compared
-    ? `<div class="answer ok"><p>There aren't enough similar practices on this network to compare your rates yet.</p></div>`
+    ? `<div class="answer ok"><p>These are your published ${esc(U)} rates. We don't have a fair peer comparison for your practice on this network yet; RSK can check them against what ${esc(U)} actually paid you.</p></div>`
     : below
       ? `<div class="answer"><p>On <b>${below} of ${compared}</b> codes we checked, ${esc(U)} pays you at least ${m.min_gap_pct}% less than the typical ${where}.</p>
          ${annual > 0 ? `<div class="money"><span class="amt">≈ $${annual.toLocaleString("en-US")}</span><span>a year, if your ${esc(U)} volume is typical</span></div>` : ""}</div>`
@@ -606,7 +607,7 @@ async function show(g, ni) {
     <div class="tablewrap"><table>
       <thead><tr><th>Code</th><th>Service</th><th class="num">Your rate</th>${gated ? "" : `<th class="num">Typical in ${esc(g.state)}</th><th class="num">Difference</th><th class="num c-peers">Practices compared</th>`}</tr></thead>
       <tbody>${rows.map((r) => `<tr><td class="code">${r.code}</td><td>${esc(r.desc)}${r.surgeon && !r.code.includes("-") ? ' <span class="na">(surgeon fee)</span>' : ""}</td>
-        <td class="num">${cents(r.rate)}</td>${gated ? "" : `
+        <td class="num">${cents(r.rate)}${r.mixed ? '<span class="na lowest">lowest of several published rates</span>' : ""}</td>${gated ? "" : `
         <td class="num">${r.compared ? cents(r.med) : '<span class="na">not compared</span>'}</td>
         <td class="num">${r.compared ? `<span class="gapcell">${gauge(r)}<span class="gap ${r.below ? "low" : r.gap < 0 ? "high" : ""}">${Math.round(r.gap) === 0 ? "" : r.gap > 0 ? "−" : "+"}${Math.abs(Math.round(r.gap))}%</span></span>` : ""}</td>
         <td class="num c-peers">${r.compared ? r.peers : ""}</td>`}</tr>`).join("")}</tbody>
