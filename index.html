@@ -241,8 +241,7 @@ a.btn { display: inline-flex; align-items: center; gap: 8px; text-decoration: no
 
 <div class="intro">
   <div><h1 id="hl">Is UHC paying you less than practices like yours?</h1>
-    <p class="lede" id="lede">Your published UnitedHealthcare rates next to the typical rate for your specialty in your state.</p>
-    <p class="fine" id="src"></p></div>
+    <p class="lede" id="lede">Your published UnitedHealthcare rates next to the typical rate for your specialty in your state.</p></div>
   <div id="view-look">
   <div class="payers" id="payers" role="radiogroup" aria-labelledby="payers-l" hidden><span id="payers-l">Rates from</span><div class="seg" id="seg"></div></div>
   <div class="search">
@@ -332,8 +331,30 @@ const cents = (v) => "$" + v.toLocaleString("en-US", { minimumFractionDigits: 2,
 const esc = (s) => String(s).replace(/[&<>"]/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;" }[c]));
 const title = (s) => /[a-z]/.test(s) ? s : s.toLowerCase().replace(/(^|[\s\-\/(])([a-z])/g, (m, a, b) => a + b.toUpperCase())
   .replace(/\b(Md|Pa|Pc|Llc|Pllc|Llp|Lp|Dba|Usa|Ii|Iii)\b/g, (m) => m.toUpperCase());
+// Payers' files abbreviate ("Vitreous Retina Macula Cons of NY"): both sides are spelled out before matching.
+const ABBR = { cons: "consultants", consult: "consultants", assoc: "associates", assocs: "associates", asso: "associates",
+  med: "medical", grp: "group", ctr: "center", cntr: "center", svc: "services", svcs: "services", inst: "institute",
+  hlth: "health", mgmt: "management", ophth: "ophthalmology", opth: "ophthalmology", surg: "surgery", spec: "specialists" };
 const norm = (s) => s.toLowerCase().replace(/&/g, " and ").replace(/orthopaedic/g, "orthopedic")
-  .replace(/[^a-z0-9]+/g, " ").trim().split(" ").filter(Boolean).map((w) => (w.length > 3 && w.endsWith("s") ? w.slice(0, -1) : w));
+  .replace(/[^a-z0-9]+/g, " ").trim().split(" ").filter(Boolean).map((w) => ABBR[w] || w)
+  .map((w) => (w.length > 3 && w.endsWith("s") ? w.slice(0, -1) : w));
+// A state typed as words ("... of New York") may be the practice's state rather than part of its name.
+const STATES = { alabama: "AL", alaska: "AK", arizona: "AZ", arkansas: "AR", california: "CA", colorado: "CO", connecticut: "CT",
+  delaware: "DE", "district of columbia": "DC", florida: "FL", georgia: "GA", hawaii: "HI", idaho: "ID", illinois: "IL",
+  indiana: "IN", iowa: "IA", kansa: "KS", kentucky: "KY", louisiana: "LA", maine: "ME", maryland: "MD", massachusett: "MA",
+  michigan: "MI", minnesota: "MN", mississippi: "MS", missouri: "MO", montana: "MT", nebraska: "NE", nevada: "NV",
+  "new hampshire": "NH", "new jersey": "NJ", "new mexico": "NM", "new york": "NY", "north carolina": "NC", "north dakota": "ND",
+  ohio: "OH", oklahoma: "OK", oregon: "OR", pennsylvania: "PA", "rhode island": "RI", "south carolina": "SC",
+  "south dakota": "SD", tennessee: "TN", texa: "TX", utah: "UT", vermont: "VT", virginia: "VA", washington: "WA",
+  "west virginia": "WV", wisconsin: "WI", wyoming: "WY" };
+function stateWords(words) {
+  // {word: state code} for the words of a state name in the query (normalized words: "texa", "kansa" as norm leaves them)
+  const out = {}, line = " " + words.join(" ") + " ";
+  for (const [nm, code] of Object.entries(STATES).sort((a, b) => b[0].length - a[0].length)) {
+    if (line.includes(" " + nm + " ")) nm.split(" ").forEach((x) => { if (!(x in out)) out[x] = code; });
+  }
+  return out;
+}
 const spec = (g) => S.meta.specialties[g.spec];
 const netsOf = (g) => Array.isArray(g.mask) ? g.mask.slice()
   : S.meta.networks.map((n, i) => i).filter((i) => Math.floor(g.mask / 2 ** i) % 2 === 1);
@@ -359,6 +380,7 @@ function load(P) {
       verified: verified === 1, reason: (typeof reason === "number" ? (data.meta.reasons || [])[reason] : reason) || "", note: note || "",
       also: Array.isArray(also) ? also : also ? String(also).split("|") : [],
       key: " " + norm([name, aliases].join(" ")).join(" ") + " ", nkey: " " + norm(name || "").join(" ") + " ",
+      sq: norm([name, aliases].join(" ")).join(""),  // "vitreoretinal" is in "vitreo retinal"
       aka: String(aliases || "").split("|").filter(Boolean),
     }));
     d.groups.forEach((g) => {
@@ -397,9 +419,6 @@ function paint() {
   document.querySelectorAll("#seg input").forEach((i) => { i.checked = i.value === P.key; });
   $("hl").textContent = `Is ${P.short} paying you less than practices like yours?`;
   $("lede").textContent = `Your published ${P.label} rates next to the typical rate for your specialty in your state.`;
-  const month = (d && d.meta.file_month) || P.file_month || "", n = +P.practices || (d && d.groups.length) || 0;
-  $("src").textContent = [n ? `${n.toLocaleString("en-US")} practices` : "", month ? `${month} rate files` : ""]
-    .filter(Boolean).join(" · ");
   $("disc").textContent = `Payor Rate Check is run by RSK Health and is not affiliated with ${P.label}.`;
 }
 
@@ -662,12 +681,14 @@ function search() {
     // (most of the words) are offered: "Retina Center of San Diego" finds "Retina San Diego" (Aaron, 2026-11-12).
     const sig = w.some((x) => !STOP.has(x)) ? w.filter((x) => !STOP.has(x)) : w;
     sigUsed = sig;
-    hits = S.groups.filter((g) => sig.every((x) => g.key.includes(" " + x)))
+    const stw = stateWords(sig);
+    const has = (g, x) => g.key.includes(" " + x) || (stw[x] && g.state === stw[x]) || (x.length >= 6 && g.sq.includes(x));
+    hits = S.groups.filter((g) => sig.every((x) => has(g, x)))
       .sort((a, b) => rank(a) - rank(b) || a.name.localeCompare(b.name));
     if (!hits.length && sig.length > 1) {
       // A rare word counts for more than a common one: "retina" over "center" or "San Diego".
       const need = Math.max(2, Math.ceil(sig.length * 0.6)), df = sig.map(() => 0);
-      const found = S.groups.map((g) => { const m = sig.map((x) => g.key.includes(" " + x)); m.forEach((y, i) => { if (y) df[i]++; }); return [g, m]; });
+      const found = S.groups.map((g) => { const m = sig.map((x) => has(g, x)); m.forEach((y, i) => { if (y) df[i]++; }); return [g, m]; });
       const idf = df.map((d) => Math.log((S.groups.length + 1) / (d + 1)));
       hits = found.filter((p) => p[1].filter(Boolean).length >= need)
         .map((p) => [p[0], p[1].reduce((t, y, i) => t + (y ? idf[i] : 0), 0)])
