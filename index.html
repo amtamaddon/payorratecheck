@@ -501,13 +501,13 @@ function defaultNet(g) {
 // Same comparison rules as the sales lookup and ratedb.py.
 function rowsFor(g, ni, data) {
   const sp = spec(g), m = S.meta, held = new Set(m.held || []);
-  return ((data[ni] || {})[g.id] || []).map(([code, rate, med, peers, rank, vol, mcr, mixed]) => {
+  return ((data[ni] || {})[g.id] || []).map(([code, rate, med, peers, rank, vol, mcr, mixed, cms, uni]) => {
     const gap = med ? (med - rate) / med * 100 : null;
     const hold = med != null && held.has(`${g.state}|${code}|${ni}`);
     const surgeon = sp.facility_codes.includes(code);
     const check = med != null && !hold && (rate < m.flag_pct_of_median / 100 * med || (!surgeon && mcr && rate < m.flag_pct_of_medicare / 100 * mcr) || !!mixed);
     const compared = med != null && !hold && !check;
-    return { code, desc: sp.codes[code] || code, rate, med, peers, gap, vol: vol || 0, surgeon, compared, mixed: !!mixed,
+    return { code, desc: sp.codes[code] || code, rate, med, peers, gap, vol: vol || 0, surgeon, compared, mixed: !!mixed, uni: !!uni,
       below: compared && gap >= m.min_gap_pct, order: sp.code_order.indexOf(code) };
   }).sort((a, b) => b.compared - a.compared || b.below - a.below || a.order - b.order);
 }
@@ -587,6 +587,10 @@ async function show(g, ni) {
   const where = `${sp.label} practice${g.state ? " in " + esc(g.state) : ""}`;
   const answer = gated
     ? `<div class="answer ok"><p>These are your published ${esc(U)} rates. We haven't verified a peer comparison for your practice yet; RSK can check them against what ${esc(U)} actually paid you.</p></div>`
+    : compared && rows.every((r) => !r.compared || r.uni)
+    // One fee schedule for everyone (BCBS Michigan pays all 94 MI ophthalmology practices $149.92 for 92014):
+    // "at or above the typical rate" would say nothing (Aaron, 2026-11-12).
+    ? `<div class="answer ok"><p>${esc(U)} pays every ${esc(sp.label)} practice in ${esc(g.state)} on this network the same published rate for these codes: one fee schedule for all, so there's no gap between practices to find. RSK can still check what ${esc(U)} actually paid you against it.</p></div>`
     : !compared
     ? `<div class="answer ok"><p>These are your published ${esc(U)} rates. We don't have a fair peer comparison for your practice on this network yet; RSK can check them against what ${esc(U)} actually paid you.</p></div>`
     : below
