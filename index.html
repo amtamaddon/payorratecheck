@@ -92,7 +92,12 @@ body.home .search { max-width: none; }
 
 /* The rate sheet: no card, only rules */
 #view-look { display: grid; gap: 28px; min-width: 0; }
+[hidden] { display: none !important; }
 .sheet { display: grid; gap: 28px; min-width: 0; border-top: 1px solid var(--line); padding-top: 30px; }
+.sheet > .sub { margin: -22px 0 0; color: var(--muted); font-size: 0.9rem; }
+.listed p { margin: 0 0 10px; max-width: 62ch; line-height: 1.55; }
+.listed p:last-child { margin-bottom: 0; }
+.sheet > .cta { justify-self: start; }
 #view-camp { border-top: 0; padding-top: 12px; }
 .ghead { display: flex; flex-wrap: wrap; justify-content: space-between; gap: 18px 40px; align-items: flex-end; }
 .ghead > div { min-width: 0; }
@@ -295,9 +300,11 @@ async function boot() {
     S.meta = data.meta;
     // Practices are keyed by organization NPI or a practice number; the public files carry no tax IDs.
     // verified: the practice's verdict holds after the geography check (site gate); otherwise its rates are shown alone.
-    S.groups = data.groups.map(([id, name, state, sp, org, mask, share, aliases, counts, nspec, verified, city]) => ({
+    // reason: a group listed without a comparison (a hospital's staff, a multi-state platform, mixed specialties...).
+    // note: why a compared practice's state was chosen (e.g. its organization NPI's state, for remote readers).
+    S.groups = data.groups.map(([id, name, state, sp, org, mask, share, aliases, counts, nspec, verified, city, reason, note]) => ({
       id, name: name || "Unnamed practice", state, spec: sp, org: org || "", mask, counts, city: city || "",
-      verified: verified === 1,
+      verified: verified === 1, reason: reason || "", note: note || "",
       key: " " + norm([name, aliases].join(" ")).join(" ") + " ",
     }));
     S.groups.forEach((g) => S.byId.set(g.id, g));
@@ -361,10 +368,24 @@ function annualFor(g, rows) {
 const gauge = (r) => `<span class="gauge ${r.below ? "low" : r.gap < 0 ? "high" : ""}" aria-hidden="true"><i style="left:${50 - Math.max(-30, Math.min(30, r.gap)) / 30 * 46}%"></i></span>`;
 
 async function show(g, ni) {
-  if (ni == null) ni = defaultNet(g);
   document.body.classList.remove("home");
   $("results").hidden = true;
   $("sheet").hidden = false;
+  if (g.reason) {
+    // Listed, not compared: every group in the file is listed, and one that can't be compared fairly says why.
+    history.replaceState(null, "", "#p-" + g.id);
+    const why = g.reason.charAt(0).toUpperCase() + g.reason.slice(1);
+    $("sheet").innerHTML = `<h2>${esc(title(g.name))}</h2>
+      <p class="sub">${esc(g.city ? title(g.city) + ", " : "")}${esc(g.state)} · ${esc(spec(g).label)}${g.org ? " · NPI " + esc(g.org) : ""}</p>
+      <div class="listed"><p>We list every group in UnitedHealthcare's published rate files, but we don't compare this one
+      with independent practices in ${esc(g.state)}, because a side-by-side wouldn't be fair.</p>
+      <p><strong>Why:</strong> ${esc(why)}.</p>
+      <p>RSK can still check what UHC actually paid you against your own contract.</p></div>
+      <div class="cta"><a class="btn" href="https://www.rsk.com/practices/rsk-health#health-review" target="_blank" rel="noopener">Request a confidential review <span aria-hidden="true">→</span></a></div>
+      <p class="note">From UnitedHealthcare's published negotiated-rate files. Payor Rate Check is run by RSK Health, 200 E. Van Buren St., Suite 600, Phoenix, AZ 85004, and is not affiliated with UnitedHealthcare. To correct or remove a listing, use the review request link above or write to that address.</p>`;
+    return;
+  }
+  if (ni == null) ni = defaultNet(g);
   $("sheet").innerHTML = '<div class="status">Loading your rates…</div>';
   let data;
   try { data = await shard(g); } catch (e) { $("sheet").innerHTML = '<div class="status">Your rates did not load. Try again.</div>'; return; }
@@ -404,6 +425,7 @@ async function show(g, ni) {
     <div class="cta"><div><h3>Want to know what UHC actually paid you?</h3>
       <p>These are the rates UHC agreed to. RSK checks your remittances for claims paid below even this rate, and helps when your contract comes up for renewal.</p></div>
       <a class="btn" href="https://www.rsk.com/practices/rsk-health#health-review" target="_blank" rel="noopener">Request a confidential review <span aria-hidden="true">→</span></a></div>
+    ${g.note ? `<p class="note">${esc(g.note)}</p>` : ""}
     <p class="note">From UnitedHealthcare's published negotiated-rate files${m.file_month ? ", " + esc(m.file_month) : ""}. The yearly figure is an estimate at typical UHC volume for a practice your size. Payor Rate Check is run by RSK Health, 200 E. Van Buren St., Suite 600, Phoenix, AZ 85004, and is not affiliated with UnitedHealthcare. To correct or remove a listing, use the review request link above or write to that address.</p>`;
   const sel = $("net"); if (sel) sel.onchange = (e) => show(g, +e.target.value);
 }
@@ -415,7 +437,15 @@ function search() {
   const digits = raw.replace(/[\s-]/g, "");
   let hits;
   if (/^\d{3,}$/.test(digits)) hits = S.groups.filter((g) => g.org && g.org.startsWith(digits));
-  else { const w = norm(raw); hits = S.groups.filter((g) => w.every((x) => g.key.includes(" " + x))).sort((a, b) => a.name.localeCompare(b.name)); }
+  else {
+    // Best matches first: the name starts with what was typed (a leading "the" ignored), then those words in that
+    // order anywhere, then the rest; compared practices before listed-only groups; then by name.
+    const w = norm(raw).filter((x, i) => !(i === 0 && x === "the")), phrase = " " + w.join(" ") + " ";
+    const lead = (g) => g.key.replace(/^ the /, " ");
+    const rank = (g) => (lead(g).startsWith(phrase) ? 0 : g.key.includes(phrase) ? 1 : 2) * 2 + (g.reason ? 1 : 0);
+    hits = S.groups.filter((g) => w.every((x) => g.key.includes(" " + x)))
+      .sort((a, b) => rank(a) - rank(b) || a.name.localeCompare(b.name));
+  }
   S.hits = hits.slice(0, 30); S.cursor = -1;
   box.innerHTML = S.hits.length ? S.hits.map((g, i) => `<button type="button" role="option" data-i="${i}"><span class="nm">${esc(title(g.name))}</span>
       <span class="tag">${esc(g.city ? title(g.city) + ", " : "")}${esc(g.state)}</span><span class="sub">${esc(spec(g).label)}${g.org ? " · NPI " + esc(g.org) : ""}</span></button>`).join("")
