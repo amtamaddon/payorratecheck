@@ -604,13 +604,14 @@ async function show(g, ni) {
   // geography check; otherwise the practice's published rates alone.
   const gated = !g.verified;
   const annual = sp.annual_in_email && !gated ? annualFor(g, rows) : 0;
-  const where = `${sp.label} practice${g.state ? " in " + esc(g.state) : ""}`;
+  const prac = / practice$/.test(sp.label) ? sp.label : sp.label + " practice";
+  const where = `${prac}${g.state ? " in " + esc(g.state) : ""}`;
   const answer = gated
     ? `<div class="answer ok"><p>These are your published ${esc(U)} rates. We haven't verified a peer comparison for your practice yet; RSK can check them against what ${esc(U)} actually paid you.</p></div>`
     : compared && rows.every((r) => !r.compared || r.uni)
     // One fee schedule for everyone (BCBS Michigan pays all 94 MI ophthalmology practices $149.92 for 92014):
     // "at or above the typical rate" would say nothing (Aaron, 2026-11-12).
-    ? `<div class="answer ok"><p>${esc(U)} pays every ${esc(sp.label)} practice in ${esc(g.state)} on this network the same published rate for these codes: one fee schedule for all, so there's no gap between practices to find. RSK can still check what ${esc(U)} actually paid you against it.</p></div>`
+    ? `<div class="answer ok"><p>${esc(U)} pays every ${esc(prac)} in ${esc(g.state)} on this network the same published rate for these codes: one fee schedule for all, so there's no gap between practices to find. RSK can still check what ${esc(U)} actually paid you against it.</p></div>`
     : !compared
     ? `<div class="answer ok"><p>These are your published ${esc(U)} rates. We don't have a fair peer comparison for your practice on this network yet; RSK can check them against what ${esc(U)} actually paid you.</p></div>`
     : below
