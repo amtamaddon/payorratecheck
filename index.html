@@ -347,6 +347,7 @@ const STATES = { alabama: "AL", alaska: "AK", arizona: "AZ", arkansas: "AR", cal
   ohio: "OH", oklahoma: "OK", oregon: "OR", pennsylvania: "PA", "rhode island": "RI", "south carolina": "SC",
   "south dakota": "SD", tennessee: "TN", texa: "TX", utah: "UT", vermont: "VT", virginia: "VA", washington: "WA",
   "west virginia": "WV", wisconsin: "WI", wyoming: "WY" };
+const CODES = new Set(Object.values(STATES).map((c) => c.toLowerCase()));
 function stateWords(words) {
   // {word: state code} for the words of a state name in the query (normalized words: "texa", "kansa" as norm leaves them)
   const out = {}, line = " " + words.join(" ") + " ";
@@ -382,6 +383,9 @@ function load(P) {
       also: Array.isArray(also) ? also : also ? String(also).split("|") : [],
       key: " " + norm([name, aliases].join(" ")).join(" ") + " ", nkey: " " + norm(name || "").join(" ") + " ",
       sq: norm([name, aliases].join(" ")).join(""),  // "vitreoretinal" is in "vitreo retinal"
+      // Adjacent words joined: "xray" finds "X-RAY PROFESSIONAL ASSOCIATION", "healthcare" finds "HEALTH CARE" (Aaron,
+      // 2026-11-13: "xray pa nh" found nothing; words under 6 letters skip the squashed match).
+      pk: ((ws) => " " + ws.slice(1).map((x, i) => ws[i] + x).join(" ") + " ")(norm([name, aliases].join(" "))),
       aka: String(aliases || "").split("|").filter(Boolean),
     }));
     d.groups.forEach((g) => {
@@ -686,7 +690,9 @@ function search() {
     const sig = w.some((x) => !STOP.has(x)) ? w.filter((x) => !STOP.has(x)) : w;
     sigUsed = sig;
     const stw = stateWords(sig);
-    const has = (g, x) => g.key.includes(" " + x) || (stw[x] && g.state === stw[x]) || (x.length >= 6 && g.sq.includes(x));
+    // A two-letter state code ("nh", "ny") is the practice's state, as a state's full name is.
+    const has = (g, x) => g.key.includes(" " + x) || (stw[x] && g.state === stw[x]) || (x.length >= 6 && g.sq.includes(x))
+      || g.pk.includes(" " + x) || (x.length === 2 && CODES.has(x) && g.state === x.toUpperCase());
     hits = S.groups.filter((g) => sig.every((x) => has(g, x)))
       .sort((a, b) => rank(a) - rank(b) || a.name.localeCompare(b.name));
     if (!hits.length && sig.length > 1) {
