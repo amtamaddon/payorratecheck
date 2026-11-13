@@ -1,0 +1,19 @@
+{
+ "payers": [
+  {
+   "key": "uhc",
+   "label": "UnitedHealthcare",
+   "short": "UHC",
+   "file_month": "November 2026",
+   "practices": 77695,
+   "path": ""
+  },
+  {
+   "key": "bcbs",
+   "label": "Blue Cross Blue Shield",
+   "short": "BCBS",
+   "file_month": "November 2026",
+   "practices": 309918
+  }
+ ]
+}
