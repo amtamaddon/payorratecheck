@@ -523,9 +523,9 @@ function rowsFor(g, ni, data) {
   const sp = spec(g), m = S.meta, held = new Set(m.held || []);
   return ((data[ni] || {})[g.id] || []).map(([code, rate, med, peers, rank, vol, mcr, mixed, cms, uni]) => {
     const gap = med ? (med - rate) / med * 100 : null;
-    const hold = med != null && held.has(`${g.state}|${code}|${ni}`);
+    const hold = med != null && (held.has(`${g.state}|${code}|${ni}`) || held.has(`${g.state}|${code}|${ni}|${sp.key}`));
     const surgeon = sp.facility_codes.includes(code);
-    const check = med != null && !hold && (rate < m.flag_pct_of_median / 100 * med || (!surgeon && mcr && rate < m.flag_pct_of_medicare / 100 * mcr) || !!mixed);
+    const check = med != null && !hold && (rate < m.flag_pct_of_median / 100 * med || (!surgeon && mcr && rate < m.flag_pct_of_medicare / 100 * mcr) || (!!mixed && m.mixed_rate !== "highest"));
     const compared = med != null && !hold && !check;
     return { code, desc: sp.codes[code] || code, rate, med, peers, gap, vol: vol || 0, surgeon, compared, mixed: !!mixed, uni: !!uni,
       below: compared && gap >= m.min_gap_pct, order: sp.code_order.indexOf(code) };
@@ -632,9 +632,9 @@ async function show(g, ni) {
     <div class="tablewrap"><table>
       <thead><tr><th>Code</th><th>Service</th><th class="num">Your rate</th>${gated ? "" : `<th class="num">Typical in ${esc(g.state)}</th><th class="num">Difference</th><th class="num c-peers">Practices compared</th>`}</tr></thead>
       <tbody>${rows.map((r) => `<tr><td class="code">${r.code}</td><td>${esc(r.desc)}${r.surgeon && !r.code.includes("-") ? ' <span class="na">(surgeon fee)</span>' : ""}</td>
-        <td class="num">${cents(r.rate)}${r.mixed ? '<span class="na lowest">one of several published rates</span>' : ""}</td>${gated ? "" : `
+        <td class="num">${cents(r.rate)}${r.mixed ? `<span class="na lowest">one of several published rates${S.meta.mixed_rate === "highest" ? " (highest shown)" : ""}</span>` : ""}</td>${gated ? "" : `
         <td class="num">${r.compared ? cents(r.med) : '<span class="na">not compared</span>'}</td>
-        <td class="num">${r.compared ? `<span class="gapcell">${gauge(r)}<span class="gap ${r.below ? "low" : r.gap < 0 ? "high" : ""}">${Math.round(r.gap) === 0 ? "" : r.gap > 0 ? "−" : "+"}${Math.abs(Math.round(r.gap))}%</span></span>` : ""}</td>
+        <td class="num">${r.compared ? `<span class="gapcell">${gauge(r)}<span class="gap ${r.below ? "low" : r.gap < 0 ? "high" : ""}">${Math.trunc(r.gap) === 0 ? "" : r.gap > 0 ? "−" : "+"}${Math.abs(Math.trunc(r.gap))}%</span></span>` : ""}</td>
         <td class="num c-peers">${r.compared ? r.peers : ""}</td>`}</tr>`).join("")}</tbody>
     </table></div>
     <div class="cta"><div><h3>Want to know what ${esc(U)} actually paid you?</h3>
