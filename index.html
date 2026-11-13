@@ -359,7 +359,8 @@ const spec = (g) => S.meta.specialties[g.spec];
 const netsOf = (g) => Array.isArray(g.mask) ? g.mask.slice()
   : S.meta.networks.map((n, i) => i).filter((i) => Math.floor(g.mask / 2 ** i) % 2 === 1);
 const poss = (s) => s + (/s$/i.test(s) ? "'" : "'s");
-const art = (w) => (/^[aeiou]/i.test(w) ? "an" : "a");
+// "a urology practice", "a university", "an obstetrics practice" (a "you" sound takes "a"; Anthem audit round 6).
+const art = (w) => (/^([aeio]|u(?!ro|ni|s[aeiu]|tah))/i.test(w) ? "an" : "a");
 // Blue plans' network labels read "HCSC: BCBS Texas : Blue Choice"; shown as "BCBS Texas · Blue Choice".
 const netName = (s) => String(s).replace(/^[^:]+: (?=.+ : )/, "").replace(/ : /g, " · ");
 // The same organization in a payer's file: its compared listing first.
