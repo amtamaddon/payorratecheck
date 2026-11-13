@@ -42,10 +42,15 @@ jobs:
         run: |
           aws s3 cp s3://$BUCKET/site/$M/manifest.json /tmp/manifest.json --only-show-errors
           # Rebuilt payers replace their whole states/ folder (chunks that no longer exist must go).
-          for d in $(python3 -c "import json;print(' '.join(json.load(open('/tmp/manifest.json'))['replace']) or '.')"); do
+          for d in $(python3 -c "import json;print(' '.join(json.load(open('/tmp/manifest.json'))['replace']))"); do
             [ "$d" = "." ] && d=""
+            before=$(ls "./${d:+$d/}states" 2>/dev/null | wc -l)
             rm -rf "./${d:+$d/}states"
             aws s3 cp "s3://$BUCKET/site/$M/files/${d:+$d/}states/" "./${d:+$d/}states/" --recursive --only-show-errors
+            after=$(ls "./${d:+$d/}states" | wc -l)
+            echo "${d:-uhc}: $before -> $after state files"
+            # A copy that lost over half a payer's files is a broken copy, not a new month: stop before committing.
+            if [ "$after" -lt $(( before / 2 )) ]; then echo "::error::${d:-uhc}: only $after of $before state files"; exit 1; fi
           done
           for f in $(python3 -c "import json;print(' '.join(json.load(open('/tmp/manifest.json'))['files']))"); do
             aws s3 cp "s3://$BUCKET/site/$M/files/$f" "./$f" --only-show-errors
@@ -54,6 +59,7 @@ jobs:
           git config user.name "github-actions[bot]"
           git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
           git add -A
+          if git diff --cached --quiet; then echo "$M: nothing changed" >> $GITHUB_STEP_SUMMARY; exit 0; fi
           git commit -q -m "Monthly data: $M (gated build from the private refresh)"
           git push -q
           # A push by this workflow's token may not start a Pages build by itself: ask for one.
