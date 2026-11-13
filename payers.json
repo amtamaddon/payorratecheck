@@ -28,6 +28,13 @@
    "short": "Aetna",
    "file_month": "November 2026",
    "practices": 230494
+  },
+  {
+   "key": "cigna",
+   "label": "Cigna",
+   "short": "Cigna",
+   "file_month": "November 2026",
+   "practices": 168525
   }
  ]
 }
