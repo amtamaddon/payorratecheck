@@ -528,16 +528,18 @@ function rowsFor(g, ni, data) {
     const surgeon = sp.facility_codes.includes(code);
     const check = med != null && !hold && (rate < m.flag_pct_of_median / 100 * med || (!surgeon && mcr && rate < m.flag_pct_of_medicare / 100 * mcr) || (!!mixed && m.mixed_rate !== "highest"));
     const compared = med != null && !hold && !check;
-    return { code, desc: sp.codes[code] || code, rate, med, peers, gap, vol: vol || 0, surgeon, compared, mixed: !!mixed, uni: !!uni,
+    return { code, desc: sp.codes[code] || code, rate, med, peers, gap, vol: vol || 0, cms: !!cms, surgeon, compared, mixed: !!mixed, uni: !!uni,
       below: compared && gap >= m.min_gap_pct, order: sp.code_order.indexOf(code) };
   }).sort((a, b) => b.compared - a.compared || b.below - a.below || a.order - b.order);
 }
 // The payer's visits per Medicare visit: per code where set (Medicare-heavy procedures), else the specialty's.
 const shareOf = (sp, code) => (sp.share_by_code && sp.share_by_code[code]) || sp.share_of_medicare || sp.uhc_share_of_medicare;
 function annualFor(g, rows) {
-  // Office codes only where the specialty says so (hospital visits are not office volume).
+  // Office codes only where the specialty says so (hospital visits are not office volume), and only codes whose volume
+  // is the practice's own Medicare count: a typical-practice estimate for a code it does not bill overstated the figure
+  // (knee and hip replacements for a shoulder clinic; UHC audit 2026-11-13). The email counts the same way.
   const sp = spec(g);
-  const v = rows.filter((r) => r.below && (!sp.annual_codes || sp.annual_codes.includes(r.code))).reduce((a, r) => a + (r.med - r.rate) * r.vol * shareOf(sp, r.code), 0);
+  const v = rows.filter((r) => r.below && r.cms && (!sp.annual_codes || sp.annual_codes.includes(r.code))).reduce((a, r) => a + (r.med - r.rate) * r.vol * shareOf(sp, r.code), 0);
   const step = v < 10000 ? 100 : 1000;
   return Math.round(v / step) * step;
 }
