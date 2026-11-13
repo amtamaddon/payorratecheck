@@ -577,7 +577,7 @@ async function show(g, ni) {
     // A practice type still in its own audit (publish_tiers.json) is not an unfair comparison: say it is in review.
     const review = /^comparisons for this practice type are in review/i.test(g.reason);
     $("sheet").innerHTML = `<h2 tabindex="-1">${esc(title(g.name))}</h2>
-      <p class="sub">${esc(label.charAt(0).toUpperCase() + label.slice(1))} · ${esc(g.city ? title(g.city) + ", " : "")}${esc(g.state)}${g.org ? " · NPI " + esc(g.org) : ""}</p>
+      <p class="sub">${review ? esc(label.charAt(0).toUpperCase() + label.slice(1)) + " · " : ""}${esc(g.city ? title(g.city) + ", " : "")}${esc(g.state)}${g.org ? " · NPI " + esc(g.org) : ""}</p>
       ${ALSO}
       ${review ? `<div class="listed"><p>We list every group in ${esc(poss(L))} published rate files. We're still checking
       comparisons for ${esc(label)} practices, so we don't show this one's rates yet.</p>` : `<div class="listed"><p>We list every group in ${esc(poss(L))} published rate files, but we don't compare this one
@@ -631,7 +631,7 @@ async function show(g, ni) {
       : nets.length ? `<div class="netpick"><span>${esc(U)} network</span> <b>${esc(netName(m.networks[nets[0]]))}</b></div>` : ""}
     <div class="tablewrap"><table>
       <thead><tr><th>Code</th><th>Service</th><th class="num">Your rate</th>${gated ? "" : `<th class="num">Typical in ${esc(g.state)}</th><th class="num">Difference</th><th class="num c-peers">Practices compared</th>`}</tr></thead>
-      <tbody>${rows.map((r) => `<tr><td class="code">${r.code}</td><td>${esc(r.desc)}${r.surgeon && !r.code.includes("-") ? ' <span class="na">(surgeon fee)</span>' : ""}</td>
+      <tbody>${rows.map((r) => `<tr><td class="code">${r.code}</td><td>${esc(r.desc)}${r.surgeon && !r.code.includes("-") ? ' <span class="na">(in-facility rate)</span>' : ""}</td>
         <td class="num">${cents(r.rate)}${r.mixed ? `<span class="na lowest">one of several published rates${S.meta.mixed_rate === "highest" ? " (highest shown)" : ""}</span>` : ""}</td>${gated ? "" : `
         <td class="num">${r.compared ? cents(r.med) : '<span class="na">not compared</span>'}</td>
         <td class="num">${r.compared ? `<span class="gapcell">${gauge(r)}<span class="gap ${r.below ? "low" : r.gap < 0 ? "high" : ""}">${Math.trunc(r.gap) === 0 ? "" : r.gap > 0 ? "−" : "+"}${Math.abs(Math.trunc(r.gap))}%</span></span>` : ""}</td>
