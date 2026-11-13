@@ -1,0 +1,61 @@
+# Daily: when the monthly refresh has left a newer, gated month in the private bucket (site/<month>/READY), copy those
+# files into this repo and commit; GitHub Pages then serves them at ratecheckmd.com. The role this assumes can read only
+# the bucket's site/ folder (checked public files); nothing about clients is ever there.
+name: Publish monthly data
+on:
+  schedule:
+    - cron: "10 15 * * *"
+  workflow_dispatch:
+permissions:
+  id-token: write
+  contents: write
+  pages: write
+concurrency:
+  group: publish
+jobs:
+  publish:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: aws-actions/configure-aws-credentials@v4
+        with:
+          role-to-assume: ${{ secrets.AWS_SITE_ROLE_ARN }}
+          aws-region: us-east-1
+      - name: Newer month ready?
+        id: ready
+        env:
+          BUCKET: ${{ secrets.DATA_BUCKET }}
+        run: |
+          M=$(aws s3 ls s3://$BUCKET/site/ | awk '{print $2}' | tr -d / | grep -E '^[0-9]{4}-[0-9]{2}$' | sort | tail -1)
+          [ -n "$M" ] && aws s3 ls s3://$BUCKET/site/$M/READY >/dev/null 2>&1 || { echo "nothing ready"; exit 0; }
+          HAVE=$(curl -fsSL https://raw.githubusercontent.com/${{ github.repository }}/main/data_month.txt 2>/dev/null | head -1)
+          [ "$HAVE" = "$M" ] && { echo "$M already published"; exit 0; }
+          echo "month=$M" >> $GITHUB_OUTPUT
+      - uses: actions/checkout@v4
+        if: steps.ready.outputs.month
+        with:
+          fetch-depth: 1
+      - name: Copy and commit
+        if: steps.ready.outputs.month
+        env:
+          BUCKET: ${{ secrets.DATA_BUCKET }}
+          M: ${{ steps.ready.outputs.month }}
+        run: |
+          aws s3 cp s3://$BUCKET/site/$M/manifest.json /tmp/manifest.json --only-show-errors
+          # Rebuilt payers replace their whole states/ folder (chunks that no longer exist must go).
+          for d in $(python3 -c "import json;print(' '.join(json.load(open('/tmp/manifest.json'))['replace']) or '.')"); do
+            [ "$d" = "." ] && d=""
+            rm -rf "./${d:+$d/}states"
+            aws s3 cp "s3://$BUCKET/site/$M/files/${d:+$d/}states/" "./${d:+$d/}states/" --recursive --only-show-errors
+          done
+          for f in $(python3 -c "import json;print(' '.join(json.load(open('/tmp/manifest.json'))['files']))"); do
+            aws s3 cp "s3://$BUCKET/site/$M/files/$f" "./$f" --only-show-errors
+          done
+          echo "$M" > data_month.txt
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add -A
+          git commit -q -m "Monthly data: $M (gated build from the private refresh)"
+          git push -q
+          # A push by this workflow's token may not start a Pages build by itself: ask for one.
+          GH_TOKEN=${{ github.token }} gh api -X POST repos/${{ github.repository }}/pages/builds >/dev/null || true
+          echo "Published $M: $(git show --stat --oneline HEAD | tail -1)" >> $GITHUB_STEP_SUMMARY
