@@ -137,6 +137,9 @@ body.home .search { max-width: none; }
 .netpick b { color: var(--ink); font-weight: 500; }
 .na.lowest { display: block; font-size: 0.72rem; white-space: nowrap; }
 .results .tryp button { display: inline; width: auto; font: inherit; color: var(--art); background: none; border: 0; padding: 0 2px; text-decoration: underline; cursor: pointer; }
+.results .regh { padding: 12px 12px 4px; margin-top: 4px; border-top: 1px solid var(--line); font-size: 0.74rem; letter-spacing: 0.04em; text-transform: uppercase; }
+.results .regh:first-child { border-top: 0; margin-top: 0; }
+.regtry button { font: inherit; color: var(--art); background: none; border: 0; padding: 0 2px; text-decoration: underline; cursor: pointer; }
 select { font: inherit; font-size: 0.86rem; color: var(--ink); background: var(--soft); border: 1px solid transparent; border-radius: 999px; padding: 7px 12px; cursor: pointer; max-width: 100%; }
 select:focus-visible { outline: 2px solid var(--art); outline-offset: 2px; }
 
@@ -476,7 +479,9 @@ async function boot() {
   }
   const m = location.hash.match(/^#p-(\w+)$/);
   const g = (npi && (S.byId.get(npi) || byOrg(S.d, npi))) || (m && S.byId.get(m[1]));
-  if (g) show(g); else { document.body.classList.add("home"); $("q").focus(); }
+  if (g) { show(g); return; }
+  const e = npi && npi.length === 10 ? await regByNpi(npi) : null;
+  if (e) showReg(e); else { document.body.classList.add("home"); $("q").focus(); }
 }
 
 // Switch payers from the picker or a practice's "see its rates" link: the same practice there when it is listed.
@@ -662,6 +667,111 @@ function viaAlias(g, sig) {
   return a ? ` · also listed as ${esc(title(a))}` : "";
 }
 const STOP = new Set(["the", "of", "and", "at", "for", "a", "an", "in", "inc", "llc", "pllc", "pc", "pa", "md", "ltd", "co", "corp"]);
+
+// The NPI Registry: every provider shows up when searched, including ones no payer's rate files list (RJ Anglin,
+// 2026-11-17). CMS's NPPES API does not allow browser calls from other sites, so the page asks the National Library of
+// Medicine's search service, which serves the same NPPES registry to web pages. What is typed goes to that service.
+const REG = "https://clinicaltables.nlm.nih.gov/api/";
+const REG_F = "NPI,name.full,provider_type,addr_practice.line1,addr_practice.city,addr_practice.state,addr_practice.zip";
+const regCache = new Map();
+let regT = 0, regTok = 0;
+function regQuery(raw) {
+  const digits = raw.replace(/[\s-]/g, "");
+  if (/^\d{3,10}$/.test(digits)) return { terms: digits, state: "" };
+  let words = raw.split(/\s+/).filter(Boolean), state = "";
+  const last = (words[words.length - 1] || "").toLowerCase();
+  if (words.length > 1 && last.length === 2 && CODES.has(last)) { state = last.toUpperCase(); words = words.slice(0, -1); }
+  const kept = words.filter((w) => !STOP.has(w.toLowerCase().replace(/[^a-z]/g, "")));
+  return { terms: (kept.length ? kept : words).join(" "), state };
+}
+function regRows(j, person) {
+  const f = Array.isArray(j) && j[2];
+  if (!f || !Array.isArray(f.NPI)) return [];
+  const v = (k, i) => ((f[k] || [])[i] || "").trim();
+  return f.NPI.map((npi, i) => ({ npi, person, name: v("name.full", i), type: v("provider_type", i), line1: v("addr_practice.line1", i),
+    city: v("addr_practice.city", i), state: v("addr_practice.state", i), zip: v("addr_practice.zip", i) }));
+}
+function regSearch(raw) {
+  const { terms, state } = regQuery(raw);
+  if (terms.replace(/[^a-z0-9]/gi, "").length < 3) return Promise.resolve([]);
+  const key = terms.toLowerCase() + "|" + state;
+  if (!regCache.has(key)) {
+    const ask = (set, person) => {
+      const ac = new AbortController(), t = setTimeout(() => ac.abort(), 5000);
+      const u = `${REG}${set}/v3/search?maxList=6&ef=${REG_F}&terms=${encodeURIComponent(terms)}`
+        + (state ? "&q=" + encodeURIComponent("addr_practice.state:" + state) : "");
+      return fetch(u, { signal: ac.signal }).then((r) => (r.ok ? r.json() : null)).catch(() => null)
+        .then((j) => { clearTimeout(t); return regRows(j, person); });
+    };
+    regCache.set(key, Promise.all([ask("npi_org", false), ask("npi_idv", true)]).then(([o, i]) => o.concat(i)));
+  }
+  return regCache.get(key);
+}
+// Registry names: "TAYANI, RAMIN" is Ramin Tayani.
+const regName = (e) => title(e.person && e.name.includes(",") ? e.name.split(",").slice(1).join(" ").trim() + " " + e.name.split(",")[0] : e.name);
+const inFiles = (e, d) => d && (d.byId.get(e.npi) || byOrg(d, e.npi));
+function fillReg(raw) {
+  clearTimeout(regT);
+  const tok = ++regTok, shown = new Set(S.hits.flatMap((g) => [g.id, g.org]));
+  regT = setTimeout(async () => {
+    const rows = await regSearch(raw), el = $("reg");
+    if (tok !== regTok || !el) return;
+    S.reg = rows.filter((e) => !shown.has(e.npi)).slice(0, 6);
+    el.innerHTML = S.reg.length ? `<div class="none regh">In the NPI Registry</div>` + S.reg.map((e, n) => `<button type="button" role="option" data-n="${n}">
+      <span class="nm">${esc(regName(e))}</span><span class="tag">${esc(e.city ? title(e.city) + ", " : "")}${esc(e.state)}</span>
+      <span class="sub">${esc(e.type || (e.person ? "Clinician" : "Organization"))} · NPI ${esc(e.npi)}${inFiles(e, S.d) ? ` · in ${esc(poss(S.p.short))} files` : ""}</span></button>`).join("") : "";
+  }, 250);
+}
+// A registry pick opens the practice when this payer lists that NPI; otherwise the registry's details.
+function openReg(e) {
+  if (!e) return;
+  $("q").value = regName(e);
+  const g = inFiles(e, S.d);
+  if (g) show(g); else showReg(e);
+}
+function regUrl(npi) {
+  syncUrl(null);
+  try {
+    const q = new URLSearchParams(location.search); q.set("npi", npi);
+    history.replaceState(null, "", location.pathname + "?" + q.toString());
+  } catch (err) { /* the address stays as it is */ }
+}
+function showReg(e) {
+  S.tok++; S.cur = null;
+  const L = S.p.label, others = S.payers.filter((p) => p !== S.p);
+  document.body.classList.remove("home");
+  $("results").hidden = true;
+  $("sheet").hidden = false;
+  regUrl(e.npi);
+  const place = [e.line1 && title(e.line1), e.city && `${title(e.city)}, ${e.state}${e.zip ? " " + e.zip.slice(0, 5) : ""}`].filter(Boolean).join(", ");
+  $("sheet").innerHTML = `<h2 tabindex="-1">${esc(regName(e))}</h2>
+    <p class="sub">${esc(e.type || (e.person ? "Clinician" : "Organization"))} · NPI ${esc(e.npi)}${place ? " · " + esc(place) : ""}</p>
+    <div class="listed"><p>This ${e.person ? "clinician" : "organization"} isn't in ${esc(poss(L))} published rate files${S.meta && S.meta.file_month ? " for " + esc(S.meta.file_month) : ""}.</p>
+      ${e.person ? "<p>Clinicians are usually listed under their practice's group. Search for your practice's name or its organization NPI.</p>" : ""}
+      ${others.length ? `<p class="regtry">Check another payer: ${others.map((p) => `<button type="button" data-regp="${esc(p.key)}">${esc(p.label)}</button>`).join(" · ")}</p>` : ""}
+      <p>RSK can still check what your payers actually paid you against your contracts.</p></div>
+    <div class="cta"><a class="btn" href="https://www.rsk.com/practices/rsk-health#health-review" target="_blank" rel="noopener">Request a confidential review <span aria-hidden="true">→</span></a></div>
+    <p class="note">Provider details from the CMS NPI Registry (NPPES), through the National Library of Medicine's search service. Payor Rate Check is run by RSK Health, 200 E. Van Buren St., Suite 600, Phoenix, AZ 85004, and is not affiliated with ${esc(L)}.</p>`;
+  $("sheet").querySelectorAll("button[data-regp]").forEach((b) => { b.onclick = () => regPayer(b.dataset.regp, e); });
+}
+async function regPayer(key, e) {
+  const P = S.payers.find((p) => p.key === key);
+  if (!P) return;
+  const tok = ++S.tok;
+  $("sheet").innerHTML = `<div class="status">Loading ${esc(P.label)} rates…</div>`;
+  let d;
+  try { d = await setPayer(P); } catch (err) {
+    if (tok === S.tok) $("sheet").innerHTML = `<div class="status">The ${esc(P.label)} rates did not load. Reload the page to try again.</div>`;
+    return;
+  }
+  if (d && tok === S.tok) openReg(e);
+}
+// An outreach ?npi= that no payer file lists: the registry's details for it.
+async function regByNpi(npi) {
+  const rows = await regSearch(npi);
+  return rows.find((e) => e.npi === npi) || null;
+}
+
 function search() {
   const raw = $("q").value.trim(), box = $("results");
   if (!raw) { box.hidden = true; S.hits = []; home(); return; }
@@ -712,11 +822,17 @@ function search() {
   const others = S.payers.filter((p) => p !== S.p);
   const tryOthers = (!S.hits.length || closest) && others.length ? `<div class="none tryp">Not finding it? Search ${
     others.map((p) => `<button type="button" data-try="${esc(p.key)}">${esc(p.label)}</button>`).join(" · ")}</div>` : "";
-  box.innerHTML = (closest ? `<div class="none">No exact match for "${esc(raw)}". Closest names:</div>` : "") +
-    (S.hits.length ? S.hits.map((g, i) => `<button type="button" role="option" data-i="${i}"><span class="nm">${esc(title(g.name))}</span>
-      <span class="tag">${esc(g.city ? title(g.city) + ", " : "")}${esc(g.state)}</span><span class="sub">${esc(spec(g).label)}${g.org ? " · NPI " + esc(g.org) : ""}${viaAlias(g, sigUsed)}</span></button>`).join("")
-    : `<div class="none">We couldn't find "${esc(raw)}" in ${esc(poss(S.p.label))} published rates. Try your organization NPI.</div>`) + tryOthers;
+  const list = S.hits.map((g, i) => `<button type="button" role="option" data-i="${i}"><span class="nm">${esc(title(g.name))}</span>
+      <span class="tag">${esc(g.city ? title(g.city) + ", " : "")}${esc(g.state)}</span><span class="sub">${esc(spec(g).label)}${g.org ? " · NPI " + esc(g.org) : ""}${viaAlias(g, sigUsed)}</span></button>`).join("");
+  // The registry's entries come first when this payer's files have no exact match: the practice the user typed, not a
+  // near miss (Legent Physician Group is in Cigna's and Aetna's files, not UHC's).
+  const reg = '<div id="reg"></div>';
+  box.innerHTML = !S.hits.length
+    ? `<div class="none">We couldn't find "${esc(raw)}" in ${esc(poss(S.p.label))} published rates. Try your organization NPI.</div>` + reg + tryOthers
+    : closest ? reg + `<div class="none">No exact match for "${esc(raw)}". Closest names:</div>` + list + tryOthers
+    : list + tryOthers + reg;
   box.hidden = false;
+  fillReg(raw);
 }
 function pick(i) { const g = S.hits[i]; if (!g) return; $("q").value = title(g.name); show(g); }
 $("q").addEventListener("input", search);
@@ -726,14 +842,26 @@ $("q").addEventListener("keydown", (e) => {
     e.preventDefault(); if (!btns.length) return;
     S.cursor = (S.cursor + (e.key === "ArrowDown" ? 1 : -1) + btns.length) % btns.length;
     btns.forEach((b, i) => b.classList.toggle("on", i === S.cursor)); btns[S.cursor].scrollIntoView({ block: "nearest" });
-  } else if (e.key === "Enter") pick(S.cursor >= 0 ? S.cursor : 0);
+  } else if (e.key === "Enter") {
+    // The highlighted row, whatever it is (a practice, a registry entry, another payer); else the first row shown.
+    if (S.cursor >= 0 && btns[S.cursor]) btns[S.cursor].click(); else openFirst();
+  }
   else if (e.key === "Escape") $("results").hidden = true;
 });
 $("results").addEventListener("click", (e) => {
   const b = e.target.closest("button[data-i]"); if (b) pick(+b.dataset.i);
   const t = e.target.closest("button[data-try]"); if (t) switchPayer(t.dataset.try);
+  const r = e.target.closest("button[data-n]"); if (r && S.reg) openReg(S.reg[+r.dataset.n]);
 });
-$("go").addEventListener("click", () => { if (S.hits.length) pick(S.cursor >= 0 ? S.cursor : 0); else $("q").focus(); });
+// The first practice or registry row on screen (the registry's come first when this payer has no exact match).
+function openFirst() {
+  const b = $("results").hidden ? null : $("results").querySelector("button[data-i], button[data-n]");
+  if (b) b.click(); else if (S.hits.length) pick(0); else $("q").focus();
+}
+$("go").addEventListener("click", () => {
+  const btns = [...$("results").querySelectorAll("button")];
+  if (S.cursor >= 0 && btns[S.cursor]) btns[S.cursor].click(); else openFirst();
+});
 // The picker is a radio group (arrow keys move through it); a short pause lets arrowing past a payer skip its download.
 let pend;
 $("seg").addEventListener("change", (e) => { clearTimeout(pend); const k = e.target.value; pend = setTimeout(() => switchPayer(k), 150); });
