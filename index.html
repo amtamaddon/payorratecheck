@@ -3,9 +3,8 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
-<meta name="description" content="See your practice's published UnitedHealthcare rates next to the typical rate for your specialty in your state.">
+<meta name="description" content="See your practice's published rates from UnitedHealthcare, Blue Cross Blue Shield, Anthem, Aetna and Cigna next to the typical rate for your specialty in your state.">
 <title>Payor Rate Check</title>
-<meta name="claude:viewport-fit-sides" content="cover">
 <link rel="icon" href="/favicon.ico?v=2" sizes="32x32">
 <link rel="icon" href="/favicon.svg?v=2" type="image/svg+xml">
 <link rel="apple-touch-icon" href="/apple-touch-icon.png?v=2">
@@ -18,7 +17,7 @@
   color-scheme: light;
   --bg: #ffffff;
   --ink: #141413;
-  --muted: #74746f;
+  --muted: #686863; /* 5.6:1 on white, 5.05:1 on --soft: AA for the payer pill and the search placeholder */
   --line: #e9e8e3;
   --soft: #f4f3ef;
   --art: #1e5b40;
@@ -111,7 +110,8 @@ body.home .search { max-width: none; }
 .sheet > .sub { margin: -22px 0 0; color: var(--muted); font-size: 0.9rem; }
 .listed p { margin: 0 0 10px; max-width: 62ch; line-height: 1.55; }
 .listed p:last-child { margin-bottom: 0; }
-.sheet > .cta { justify-self: start; }
+/* The full card spans the table; a card holding only the button (listed practices) is just the button. */
+.sheet > .cta:not(:has(h3)) { justify-self: start; border: 0; padding: 0; }
 #view-camp { border-top: 0; padding-top: 12px; }
 .ghead { display: flex; flex-wrap: wrap; justify-content: space-between; gap: 18px 40px; align-items: flex-end; }
 .ghead > div { min-width: 0; }
@@ -169,6 +169,7 @@ th:first-child, td:first-child { padding-left: 0; }
 th:last-child, td:last-child { padding-right: 0; }
 td.num, th.num { text-align: right; font-variant-numeric: tabular-nums; white-space: nowrap; }
 td.code { font-variant-numeric: tabular-nums; font-weight: 500; }
+.mcode, .mpeers { display: none; }
 .gapcell { display: inline-flex; align-items: center; gap: 12px; justify-content: flex-end; }
 .gap { font-weight: 500; min-width: 3.2em; }
 .gap.low { color: var(--below); }
@@ -214,6 +215,16 @@ body:not(.home) .disc { display: none; }
   td, th { padding-left: 5px; padding-right: 5px; }
   th { white-space: normal; }
   .gap { min-width: 0; }
+  /* Phones: the code moves above its description and the peer count under the typical rate, so the difference column
+     fits on screen (it fell past the right edge at 360-430px; Fable UI review, 2026-11-22). */
+  th:first-child, td.code { display: none; }
+  .mcode { display: block; font-weight: 500; font-variant-numeric: tabular-nums; }
+  .mpeers { display: block; font-size: 0.72rem; }
+  th:nth-child(2), td:nth-child(2) { padding-left: 0; overflow-wrap: anywhere; hyphens: auto; }
+  table { font-size: 0.8rem; }
+  td, th { padding-left: 3px; padding-right: 3px; }
+  .na.lowest { white-space: normal; }
+  .search input { font-size: 16px; } /* under 16px, iPhone Safari zooms the page when the box is tapped */
   .scene.low { height: 120px; }
 }
 @media (prefers-reduced-motion: no-preference) {
@@ -235,6 +246,25 @@ body:not(.home) .lede { display: none; }
 .cta p { margin: 0; color: var(--muted); max-width: 58ch; }
 a.btn { display: inline-flex; align-items: center; gap: 8px; text-decoration: none; padding: 11px 18px; white-space: nowrap; }
 .note { color: var(--muted); font-size: 0.8rem; margin: 0; }
+.how { font-size: 0.88rem; color: var(--muted); }
+.how summary { cursor: pointer; color: var(--ink); width: fit-content; }
+.how ul { margin: 8px 0 0; padding-left: 18px; display: grid; gap: 4px; max-width: 72ch; }
+.linkbtn { font: inherit; color: var(--art); background: none; border: 0; padding: 0; text-decoration: underline; cursor: pointer; }
+.printonly { display: none; }
+/* A one-page rate brief to print or save as PDF (Fable product review, 2026-11-22): the practice, its payer, network, file
+   month and link, the verdict, how it was compared, and the table with peer counts; no search, art or buttons. */
+@media print {
+  .nav, .scene, .intro, .also, .netpick, .foot, .printrow, .cta .btn, .how summary { display: none !important; }
+  .printonly { display: block; }
+  body { background: #fff; }
+  .page { max-width: none; }
+  .sheet { border-top: 0; padding-top: 0; gap: 16px; animation: none !important; }
+  .how ul { margin: 0; }
+  th:first-child, td.code, .c-peers { display: table-cell !important; }
+  .mcode, .mpeers, .gauge { display: none !important; }
+  tr { break-inside: avoid; }
+  .cta { border: 0; padding: 0; }
+}
 </style>
 <div class="page">
 <nav class="nav">
@@ -246,6 +276,7 @@ a.btn { display: inline-flex; align-items: center; gap: 8px; text-decoration: no
   <div class="balloon"><svg viewBox="0 0 34 48" fill="none" stroke="currentColor" stroke-width="1" stroke-linecap="round"><path class="skin" d="M17 1C8 1 2 7.5 2 15.5c0 8 8 13 11.5 19.5h7C24 28.5 32 23.5 32 15.5 32 7.5 26 1 17 1Z"/><path d="M17 1c-4 4-5.5 9-5.5 14.5S14 30 15 35M17 1c4 4 5.5 9 5.5 14.5S20 30 19 35M17 1v34M2.2 14h29.6M13.5 35l1 6M20.5 35l-1 6"/><rect class="skin" x="13.5" y="41" width="7" height="5.5" rx="1"/></svg></div>
 </div>
 
+<main>
 <div class="intro">
   <div><h1 id="hl">Is UHC paying you less than practices like yours?</h1>
     <p class="lede" id="lede">Your published UnitedHealthcare rates next to the typical rate for your specialty in your state.</p></div>
@@ -260,6 +291,7 @@ a.btn { display: inline-flex; align-items: center; gap: 8px; text-decoration: no
 </div>
 
 <section class="sheet" id="sheet" aria-live="polite" hidden></section>
+</main>
 
 <footer class="foot">
   <div class="scene low" aria-hidden="true"><div class="art"></div></div>
@@ -446,7 +478,7 @@ function syncUrl(g) {
   history.replaceState(null, "", location.pathname + (s ? "?" + s : "") + (g ? "#p-" + g.id : ""));
 }
 function home() {
-  S.tok++; S.cur = null;
+  S.tok++; S.cur = null; S.lost = null;
   $("sheet").hidden = true;
   document.body.classList.add("home");
   syncUrl(null);
@@ -492,8 +524,10 @@ async function boot() {
 async function switchPayer(key, focus) {
   const P = S.payers.find((p) => p.key === key);
   if (!P || P === S.p) return;
-  const was = S.cur, tok = ++S.tok;
-  S.cur = null;
+  // S.lost: the practice shown before a payer that doesn't list it, so switching on to one that does reopens it (X-Ray
+  // Professional Association: BCBS, then Aetna, landed on the home page; Fable UI review, 2026-11-22).
+  const was = S.cur || S.lost, tok = ++S.tok;
+  S.cur = null; S.lost = null;
   if (was) { $("sheet").hidden = false; $("sheet").innerHTML = `<div class="status">Loading ${esc(P.label)} rates…</div>`; }
   const loading = setPayer(P), typed = () => !was && $("q").value.trim();
   if (typed()) search(); // the new payer's matches, or a loading line until its index arrives
@@ -512,6 +546,7 @@ async function switchPayer(key, focus) {
     const h = S.cur === g && $("sheet").querySelector("h2");
     if (focus && h) h.focus();
   } else if (was) {
+    S.lost = was;
     syncUrl(null);
     $("sheet").innerHTML = `<div class="status">${esc(title(was.name))} isn't in ${esc(poss(P.label))} published rate files. Search above for another practice.</div>`;
   } else { home(); if (typed()) search(); }
@@ -582,7 +617,7 @@ function fillAlso(g, tok) {
 
 async function show(g, ni) {
   const tok = ++S.tok, U = S.p.short, L = S.p.label;
-  S.cur = g;
+  S.cur = g; S.lost = null;
   document.body.classList.remove("home");
   $("results").hidden = true;
   $("sheet").hidden = false;
@@ -639,18 +674,34 @@ async function show(g, ni) {
       ? `<div class="answer ok"><p>${esc(U)} pays you <b>within ${m.min_gap_pct}% of the typical rate, or above it,</b> for ${art(sp.label)} ${where} on every code we checked.</p></div>`
       : `<div class="answer ok"><p>${esc(U)} pays you <b>at or above the typical rate</b> for ${art(sp.label)} ${where} on every code we checked.</p></div>`;
   const nets = netsOf(g);
+  // How the comparison was made, beside the verdict (Fable product review, 2026-11-22): who the peers are, the month, the
+  // rules, and that a published rate is not what was paid. Only numbers already on the page.
+  const cmp = rows.filter((r) => r.compared), ps = cmp.map((r) => r.peers);
+  const peers = ps.length ? (Math.min(...ps) === Math.max(...ps) ? `${ps[0]}` : `${Math.min(...ps)} to ${Math.max(...ps)}`) : "";
+  const netLabel = ni != null && m.networks[ni] ? netName(m.networks[ni]) : "";
+  const how = `<details class="how"><summary>How we compared</summary><ul>
+    ${gated ? `<li>We show a comparison only after checking that this practice's state and specialty match ${esc(poss(L))} files. This one isn't checked yet.</li>`
+      : cmp.length ? `<li>Each rate is set against the typical (median) rate of ${peers} ${esc(sp.peer_phrase || "independent " + prac + "s")} in ${esc(g.state)}${netLabel ? ` on the ${esc(netLabel)} network` : ""}.</li>
+      <li>A code counts as below when ${esc(U)} pays you at least ${m.min_gap_pct}% less than that rate. Codes marked "not compared" have fewer than ${m.min_peers} comparable practices, or a rate we couldn't match fairly.</li>`
+      : `<li>No code here has at least ${m.min_peers} comparable practices on this network, so nothing is compared.</li>`}
+    ${rows.some((r) => r.mixed) ? `<li>Where ${esc(U)} publishes several rates for a code, the highest is shown.</li>` : ""}
+    <li>From ${esc(poss(L))} published negotiated-rate files${m.file_month ? ", " + esc(m.file_month) : ""}.</li>
+    <li>A published rate is what ${esc(U)} agreed to pay, not what it paid. RSK checks your remittances against it.</li></ul></details>`;
+  const link = `ratecheckmd.com/?${S.p === S.def ? "" : "payer=" + encodeURIComponent(S.p.key) + "&"}npi=${encodeURIComponent(g.org || g.id)}`;
   $("sheet").innerHTML = `
     <div><h2 tabindex="-1">${esc(title(g.name))}</h2>
       <div class="facts">${esc(sp.label[0].toUpperCase() + sp.label.slice(1))}${g.city ? " · " + esc(title(g.city)) : ""}${g.state ? ", " + esc(g.state) : ""}${g.org ? " · NPI " + esc(g.org) : ""}</div>
+      <p class="note printonly">${esc(L)}${netLabel ? " · " + esc(netLabel) + " network" : ""}${m.file_month ? " · " + esc(m.file_month) + " files" : ""} · ${esc(link)}</p>
       ${ALSO}</div>
     ${answer}
+    ${how}
     ${nets.length > 1 ? `<div class="netpick"><label for="net">${esc(U)} network</label><select id="net">${nets.map((i) => `<option value="${i}"${i === ni ? " selected" : ""}>${esc(netName(m.networks[i]))}</option>`).join("")}</select></div>`
       : nets.length ? `<div class="netpick"><span>${esc(U)} network</span> <b>${esc(netName(m.networks[nets[0]]))}</b></div>` : ""}
     <div class="tablewrap"><table>
       <thead><tr><th>Code</th><th>Service</th><th class="num">Your rate</th>${gated ? "" : `<th class="num">Typical in ${esc(g.state)}</th><th class="num">Difference</th><th class="num c-peers">Practices compared</th>`}</tr></thead>
-      <tbody>${rows.map((r) => `<tr><td class="code">${r.code}</td><td>${esc(r.desc)}${r.surgeon && !r.code.includes("-") ? ' <span class="na">(in-facility rate)</span>' : ""}</td>
+      <tbody>${rows.map((r) => `<tr><td class="code">${r.code}</td><td><span class="mcode">${r.code}</span>${esc(r.desc)}${r.surgeon && !r.code.includes("-") ? ' <span class="na">(in-facility rate)</span>' : ""}</td>
         <td class="num">${cents(r.rate)}${r.mixed ? `<span class="na lowest">one of several published rates${S.meta.mixed_rate === "highest" ? " (highest shown)" : ""}</span>` : ""}</td>${gated ? "" : `
-        <td class="num">${r.compared ? cents(r.med) : '<span class="na">not compared</span>'}</td>
+        <td class="num">${r.compared ? cents(r.med) + `<span class="na mpeers">${r.peers} practices</span>` : '<span class="na">not compared</span>'}</td>
         <td class="num">${r.compared ? `<span class="gapcell">${gauge(r)}<span class="gap ${r.below ? "low" : r.gap < 0 ? "high" : ""}">${Math.trunc(r.gap) === 0 ? "" : r.gap > 0 ? "−" : "+"}${Math.abs(Math.trunc(r.gap))}%</span></span>` : ""}</td>
         <td class="num c-peers">${r.compared ? r.peers : ""}</td>`}</tr>`).join("")}</tbody>
     </table></div>
@@ -658,8 +709,10 @@ async function show(g, ni) {
       <p>These are the rates ${esc(U)} agreed to. RSK checks your remittances for claims paid below even this rate, and helps when your contract comes up for renewal.</p></div>
       <a class="btn" href="https://www.rsk.com/practices/rsk-health#health-review" target="_blank" rel="noopener">Request a confidential review <span aria-hidden="true">→</span></a></div>
     ${g.note ? `<p class="note">${esc(g.note)}</p>` : ""}
-    <p class="note">From ${esc(poss(L))} published negotiated-rate files${m.file_month ? ", " + esc(m.file_month) : ""}.${annual > 0 ? ` The yearly figure is an estimate at typical ${esc(U)} volume for a practice your size.` : ""} Payor Rate Check is run by RSK Health, 200 E. Van Buren St., Suite 600, Phoenix, AZ 85004, and is not affiliated with ${esc(L)}. To correct or remove a listing, use the review request link above or write to that address.</p>`;
+    <p class="note">From ${esc(poss(L))} published negotiated-rate files${m.file_month ? ", " + esc(m.file_month) : ""}.${annual > 0 ? ` The yearly figure is an estimate at typical ${esc(U)} volume for a practice your size.` : ""} Payor Rate Check is run by RSK Health, 200 E. Van Buren St., Suite 600, Phoenix, AZ 85004, and is not affiliated with ${esc(L)}. To correct or remove a listing, use the review request link above or write to that address.</p>
+    <p class="note printrow"><button type="button" class="linkbtn" id="print">Print or save as PDF</button></p>`;
   const sel = $("net"); if (sel) sel.onchange = (e) => show(g, +e.target.value);
+  const pb = $("print"); if (pb) pb.onclick = () => window.print();
   fillAlso(g, tok);
 }
 
@@ -906,7 +959,10 @@ async function fillMso(raw) {
     + `<div class="none msoh">Practices as listed on ${c.src ? `<a href="${esc(c.src)}" target="_blank" rel="noopener">its website</a>` : "its website"} or in its announcements.</div>`;
 }
 function pick(i) { const g = S.hits[i]; if (!g) return; $("q").value = title(g.name); show(g); }
-$("q").addEventListener("input", search);
+$("q").addEventListener("input", () => { S.lost = null; search(); }); // a new search replaces the practice to reopen
+// A printed brief shows how the comparison was made: a closed <details> does not print.
+window.addEventListener("beforeprint", () => document.querySelectorAll("details.how").forEach((d) => { d.dataset.was = d.open ? "1" : ""; d.open = true; }));
+window.addEventListener("afterprint", () => document.querySelectorAll("details.how").forEach((d) => { d.open = d.dataset.was === "1"; }));
 $("q").addEventListener("keydown", (e) => {
   const btns = [...$("results").querySelectorAll("button")];
   if (e.key === "ArrowDown" || e.key === "ArrowUp") {

@@ -40,8 +40,14 @@ jobs:
           M: ${{ steps.ready.outputs.month }}
         run: |
           aws s3 cp s3://$BUCKET/site/$M/manifest.json /tmp/manifest.json --only-show-errors
+          # Read the manifest once: a failed assignment stops the run, while a failed $(...) inside "for" would loop zero
+          # times and still mark the month published with no data (Fable review, 2026-11-22).
+          REPLACE=$(python3 -c "import json;print(' '.join(json.load(open('/tmp/manifest.json'))['replace']))")
+          FILES=$(python3 -c "import json;print(' '.join(json.load(open('/tmp/manifest.json'))['files']))")
+          [ -n "$FILES" ] || { echo "::error::manifest lists no files"; exit 1; }
           # Rebuilt payers replace their whole states/ folder (chunks that no longer exist must go).
-          for d in $(python3 -c "import json;print(' '.join(json.load(open('/tmp/manifest.json'))['replace']))"); do
+          for d in $REPLACE; do
+            [[ "$d" =~ ^(\.|payers/[a-z0-9_-]+)$ ]] || { echo "::error::unexpected folder in the manifest: $d"; exit 1; }
             [ "$d" = "." ] && d=""
             before=$(ls "./${d:+$d/}states" 2>/dev/null | wc -l)
             rm -rf "./${d:+$d/}states"
@@ -51,9 +57,22 @@ jobs:
             # A copy that lost over half a payer's files is a broken copy, not a new month: stop before committing.
             if [ "$after" -lt $(( before / 2 )) ]; then echo "::error::${d:-uhc}: only $after of $before state files"; exit 1; fi
           done
-          for f in $(python3 -c "import json;print(' '.join(json.load(open('/tmp/manifest.json'))['files']))"); do
+          for f in $FILES; do
+            [[ "$f" =~ ^(payers\.json|index\.json|payers/[a-z0-9_-]+/index\.json)$ ]] || { echo "::error::unexpected file in the manifest: $f"; exit 1; }
             aws s3 cp "s3://$BUCKET/site/$M/files/$f" "./$f" --only-show-errors
           done
+          # Last check before a public, permanent commit (this repo is public): every data file parses, and nothing looks
+          # like a tax ID or SSN. The private build checks too; this catches anything that slipped past it.
+          python3 - <<'PY'
+          import glob, json, re, sys
+          bad = re.compile(r"(?<![\d-])(\d{2}-\d{7}|\d{3}-\d{2}-\d{4})(?![\d-])")
+          for p in (["payers.json", "index.json", "mso.json"] + glob.glob("states/*.json") + glob.glob("payers/*/index.json")
+                    + glob.glob("payers/*/states/*.json")):
+              t = open(p, encoding="utf-8").read()
+              json.loads(t)
+              if bad.search(t):
+                  sys.exit(f"::error::{p}: tax-ID- or SSN-like text; not publishing")
+          PY
           echo "$M" > data_month.txt
           git config user.name "github-actions[bot]"
           git config user.email "41898282+github-actions[bot]@users.noreply.github.com"

@@ -6,3 +6,5 @@ Disallow: /payers/
 Disallow: /payers.json
 Disallow: /*?npi=
 Disallow: /*&npi=
+Disallow: /mso.json
+Disallow: /data_month.txt
