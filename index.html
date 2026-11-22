@@ -104,7 +104,7 @@ body.home .search { max-width: none; }
 .chip.even { background: var(--soft); color: var(--muted); }
 
 /* The rate sheet: no card, only rules */
-#view-look { display: grid; gap: 12px; min-width: 0; }
+#view-look { display: grid; grid-template-columns: minmax(0, 1fr); gap: 12px; min-width: 0; } /* shrinks to a phone */
 [hidden] { display: none !important; }
 .sheet { display: grid; gap: 28px; min-width: 0; border-top: 1px solid var(--line); padding-top: 30px; }
 .sheet > .sub { margin: -22px 0 0; color: var(--muted); font-size: 0.9rem; }
@@ -251,10 +251,52 @@ a.btn { display: inline-flex; align-items: center; gap: 8px; text-decoration: no
 .how ul { margin: 8px 0 0; padding-left: 18px; display: grid; gap: 4px; max-width: 72ch; }
 .linkbtn { font: inherit; color: var(--art); background: none; border: 0; padding: 0; text-decoration: underline; cursor: pointer; }
 .printonly { display: none; }
+/* The rate view (Aaron's layout, 2026-11-22): a verdict card, then the network and print, then the table in a box.
+   The homepage and the review card are unchanged. */
+.vcard { background: var(--soft); border-left: 3px solid var(--above); border-radius: 0 12px 12px 0; padding: 20px 24px; display: grid; gap: 12px; }
+.vcard.low { border-left-color: var(--below); }
+.vcard.plain { border-left-color: #cfcdc4; } /* no comparison, or one fee schedule for all: neither good nor bad */
+.vtop { display: flex; flex-wrap: wrap; justify-content: space-between; align-items: flex-end; gap: 18px 40px; }
+.vmain { flex: 1 1 360px; min-width: 0; display: grid; gap: 10px; }
+.vsub { margin: 0; color: var(--muted); font-size: 0.86rem; }
+.spread { flex: 0 1 300px; min-width: 220px; }
+.spread .track { display: flex; gap: 2px; height: 8px; border-radius: 999px; overflow: hidden; }
+.seg-low { background: var(--below); }
+.seg-mid { background: #cfcdc4; }
+.seg-high { background: var(--above); }
+.spread .cap { display: flex; justify-content: space-between; gap: 10px; margin-top: 8px; font-size: 0.75rem; color: var(--muted); }
+.spread .cap b { color: var(--ink); font-weight: 600; font-variant-numeric: tabular-nums; }
+.vcard .how { padding-top: 10px; border-top: 1px solid var(--line); }
+.ratebar { display: flex; flex-wrap: wrap; justify-content: space-between; align-items: center; gap: 10px 20px; margin-bottom: -14px; }
+.printbtn { font-size: 0.86rem; }
+.tablewrap { border: 1px solid var(--line); border-radius: 12px; }
+.tablewrap th { background: var(--soft); text-transform: uppercase; letter-spacing: 0.04em; font-size: 0.72rem; font-weight: 500; padding: 11px 12px; }
+.tablewrap td { padding: 12px; }
+.tablewrap td.code { white-space: nowrap; }
+.tablewrap th:first-child, .tablewrap td:first-child { padding-left: 16px; }
+.tablewrap th:last-child, .tablewrap td:last-child { padding-right: 16px; }
+.tablewrap tbody tr:hover td { background: var(--hover); }
+.tablewrap tbody tr:last-child td { border-bottom: 0; }
+@media (max-width: 700px) {
+  .vcard { padding: 16px; }
+  .spread { flex-basis: 100%; min-width: 0; }
+  /* Phone headers: no capitals or tracking, so the service column keeps its room. */
+  .tablewrap th { text-transform: none; letter-spacing: 0; font-size: 0.74rem; }
+  .mcode { white-space: nowrap; }
+  .tablewrap th, .tablewrap td { padding-left: 3px; padding-right: 3px; }
+  .tablewrap th:nth-child(2), .tablewrap td:nth-child(2) { padding-left: 8px; }
+  .tablewrap th:nth-child(5), .tablewrap td:nth-child(5), .tablewrap th:last-child, .tablewrap td:last-child { padding-right: 8px; }
+}
+@media (max-width: 420px) {
+  .seg .opt { padding: 6px 9px; } /* all five payers fit a phone's width */
+}
+@media (max-width: 360px) {
+  .seg .opt { padding: 6px 6px; }
+}
 /* A one-page rate brief to print or save as PDF (Fable product review, 2026-11-22): the practice, its payer, network, file
    month and link, the verdict, how it was compared, and the table with peer counts; no search, art or buttons. */
 @media print {
-  .nav, .scene, .intro, .also, .netpick, .foot, .printrow, .cta .btn, .how summary { display: none !important; }
+  .nav, .scene, .intro, .also, .netpick, .foot, .printbtn, .cta .btn, .how summary { display: none !important; }
   .printonly { display: block; }
   body { background: #fff; }
   .page { max-width: none; }
@@ -688,15 +730,27 @@ async function show(g, ni) {
     <li>From ${esc(poss(L))} published negotiated-rate files${m.file_month ? ", " + esc(m.file_month) : ""}.</li>
     <li>A published rate is what ${esc(U)} agreed to pay, not what it paid. RSK checks your remittances against it.</li></ul></details>`;
   const link = `ratecheckmd.com/?${S.p === S.def ? "" : "payer=" + encodeURIComponent(S.p.key) + "&"}npi=${encodeURIComponent(g.org || g.id)}`;
+  // The verdict card (Aaron's rate-view layout, 2026-11-22): the sentence, who it was compared with, how many codes fall
+  // below, within and above the typical rate, and how the comparison was made. Counts of the rows below: no new numbers.
+  const above = rows.filter((r) => r.compared && r.gap <= -m.min_gap_pct).length, within = compared - below - above;
+  const uniform = compared && rows.every((r) => !r.compared || r.uni);
+  const spread = gated || !compared || uniform ? "" : `<div class="spread">
+      <div class="track" aria-hidden="true">${[["low", below], ["mid", within], ["high", above]].filter(([, n]) => n)
+        .map(([k, n]) => `<span class="seg-${k}" style="flex:${n}"></span>`).join("")}</div>
+      <div class="cap"><span><b>${below}</b> below typical</span><span><b>${within}</b> within ${m.min_gap_pct}%</span><span><b>${above}</b> above</span></div></div>`;
+  const vsub = !gated && cmp.length ? `Compared with ${peers} ${esc(sp.peer_phrase || "independent " + prac + "s")} in ${esc(g.state)}${netLabel ? ` on ${esc(netLabel.replace(/ \(same rates:.*\)$/, ""))}` : ""}${m.file_month ? ` · ${esc(m.file_month)} files` : ""}` : "";
+  const card = `<div class="vcard${gated || !compared || uniform ? " plain" : below ? " low" : ""}">
+      <div class="vtop"><div class="vmain">${answer}${vsub ? `<p class="vsub">${vsub}</p>` : ""}</div>${spread}</div>
+      ${how}</div>`;
   $("sheet").innerHTML = `
     <div><h2 tabindex="-1">${esc(title(g.name))}</h2>
       <div class="facts">${esc(sp.label[0].toUpperCase() + sp.label.slice(1))}${g.city ? " · " + esc(title(g.city)) : ""}${g.state ? ", " + esc(g.state) : ""}${g.org ? " · NPI " + esc(g.org) : ""}</div>
       <p class="note printonly">${esc(L)}${netLabel ? " · " + esc(netLabel) + " network" : ""}${m.file_month ? " · " + esc(m.file_month) + " files" : ""} · ${esc(link)}</p>
       ${ALSO}</div>
-    ${answer}
-    ${how}
-    ${nets.length > 1 ? `<div class="netpick"><label for="net">${esc(U)} network</label><select id="net">${nets.map((i) => `<option value="${i}"${i === ni ? " selected" : ""}>${esc(netName(m.networks[i]))}</option>`).join("")}</select></div>`
-      : nets.length ? `<div class="netpick"><span>${esc(U)} network</span> <b>${esc(netName(m.networks[nets[0]]))}</b></div>` : ""}
+    ${card}
+    <div class="ratebar">${nets.length > 1 ? `<div class="netpick"><label for="net">${esc(U)} network</label><select id="net">${nets.map((i) => `<option value="${i}"${i === ni ? " selected" : ""}>${esc(netName(m.networks[i]))}</option>`).join("")}</select></div>`
+      : nets.length ? `<div class="netpick"><span>${esc(U)} network</span> <b>${esc(netName(m.networks[nets[0]]))}</b></div>` : "<div></div>"}
+      <button type="button" class="linkbtn printbtn" id="print">Print or save as PDF</button></div>
     <div class="tablewrap"><table>
       <thead><tr><th>Code</th><th>Service</th><th class="num">Your rate</th>${gated ? "" : `<th class="num">Typical in ${esc(g.state)}</th><th class="num">Difference</th><th class="num c-peers">Practices compared</th>`}</tr></thead>
       <tbody>${rows.map((r) => `<tr><td class="code">${r.code}</td><td><span class="mcode">${r.code}</span>${esc(r.desc)}${r.surgeon && !r.code.includes("-") ? ' <span class="na">(in-facility rate)</span>' : ""}</td>
@@ -709,8 +763,7 @@ async function show(g, ni) {
       <p>These are the rates ${esc(U)} agreed to. RSK checks your remittances for claims paid below even this rate, and helps when your contract comes up for renewal.</p></div>
       <a class="btn" href="https://www.rsk.com/practices/rsk-health#health-review" target="_blank" rel="noopener">Request a confidential review <span aria-hidden="true">→</span></a></div>
     ${g.note ? `<p class="note">${esc(g.note)}</p>` : ""}
-    <p class="note">From ${esc(poss(L))} published negotiated-rate files${m.file_month ? ", " + esc(m.file_month) : ""}.${annual > 0 ? ` The yearly figure is an estimate at typical ${esc(U)} volume for a practice your size.` : ""} Payor Rate Check is run by RSK Health, 200 E. Van Buren St., Suite 600, Phoenix, AZ 85004, and is not affiliated with ${esc(L)}. To correct or remove a listing, use the review request link above or write to that address.</p>
-    <p class="note printrow"><button type="button" class="linkbtn" id="print">Print or save as PDF</button></p>`;
+    <p class="note">From ${esc(poss(L))} published negotiated-rate files${m.file_month ? ", " + esc(m.file_month) : ""}.${annual > 0 ? ` The yearly figure is an estimate at typical ${esc(U)} volume for a practice your size.` : ""} Payor Rate Check is run by RSK Health, 200 E. Van Buren St., Suite 600, Phoenix, AZ 85004, and is not affiliated with ${esc(L)}. To correct or remove a listing, use the review request link above or write to that address.</p>`;
   const sel = $("net"); if (sel) sel.onchange = (e) => show(g, +e.target.value);
   const pb = $("print"); if (pb) pb.onclick = () => window.print();
   fillAlso(g, tok);
