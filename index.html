@@ -140,6 +140,10 @@ body.home .search { max-width: none; }
 .results .regh { padding: 12px 12px 4px; margin-top: 4px; border-top: 1px solid var(--line); font-size: 0.74rem; letter-spacing: 0.04em; text-transform: uppercase; }
 .results .regh:first-child { border-top: 0; margin-top: 0; }
 .regtry button { font: inherit; color: var(--art); background: none; border: 0; padding: 0 2px; text-decoration: underline; cursor: pointer; }
+.results .msoh { padding: 12px 12px 6px; }
+.results .msoh b { color: var(--ink, inherit); }
+.results .msoh a { color: var(--art); }
+.results .msomiss button { display: inline; width: auto; font: inherit; color: var(--art); background: none; border: 0; padding: 0 1px; text-decoration: underline; cursor: pointer; }
 select { font: inherit; font-size: 0.86rem; color: var(--ink); background: var(--soft); border: 1px solid transparent; border-radius: 999px; padding: 7px 12px; cursor: pointer; max-width: 100%; }
 select:focus-visible { outline: 2px solid var(--art); outline-offset: 2px; }
 
@@ -827,12 +831,79 @@ function search() {
   // The registry's entries come first when this payer's files have no exact match: the practice the user typed, not a
   // near miss (Legent Physician Group is in Cigna's and Aetna's files, not UHC's).
   const reg = '<div id="reg"></div>';
-  box.innerHTML = !S.hits.length
-    ? `<div class="none">We couldn't find "${esc(raw)}" in ${esc(poss(S.p.label))} published rates. Try your organization NPI.</div>` + reg + tryOthers
+  box.innerHTML = '<div id="mso"></div>' + (!S.hits.length
+    ? `<div class="none nohit">We couldn't find "${esc(raw)}" in ${esc(poss(S.p.label))} published rates. Try your organization NPI.</div>` + reg + tryOthers
     : closest ? reg + `<div class="none">No exact match for "${esc(raw)}". Closest names:</div>` + list + tryOthers
-    : list + tryOthers + reg;
+    : list + tryOthers + reg);
   box.hidden = false;
   fillReg(raw);
+  fillMso(raw);
+}
+
+// Management companies (MSOs): a company is not a provider, so its name is in no payer's files and the registry has no
+// entry for it (Aaron, 2026-11-17: "retina consultants of america cant find them"). Typing its name shows the practices
+// it lists, from its own site and announcements (mso.json); a practice is found here by its NPI, or by its exact name
+// in its state (and city, when both have one).
+let MSO = null, msoTok = 0;
+const msoLoad = () => (MSO = MSO || fetch("mso.json").then((r) => (r.ok ? r.json() : null)).catch(() => null)
+  .then((j) => (j ? j.companies.map(([name, aka, sp, src, prac]) => ({ name, aka, src, prac,
+    keys: [name, ...aka].map((n) => " " + norm(n).join(" ") + " ") })) : [])));
+function msoMatch(cos, raw) {
+  const t = norm(raw).filter((x, i) => !(i === 0 && x === "the"));
+  if (t.join("").length < 4) return null;
+  const phrase = " " + t.join(" ") + " ";
+  // Its name or another name typed in full, or the start of its name in two words or more ("retina consultants of").
+  return cos.find((c) => c.keys.includes(phrase))
+    || (t.length >= 2 ? cos.find((c) => c.keys[0].replace(/^ the /, " ").startsWith(phrase)) : null) || null;
+}
+// A name without filler words and legal endings ("Retina Consultants of Houston PLLC" is "retina consultants houston").
+const ENDS = new Set(["llp", "lp", "apc", "apmc", "psc", "sc", "ps", "plc", "chartered", "pllc", "llc"]);
+const msoKey = (n) => norm(n).filter((x) => !STOP.has(x) && !ENDS.has(x)).join(" ");
+// This payer's practices by their own name and state, built once. Not by the other names a tax ID carries: a tax ID
+// listing "Vision Correction Center" is Capstone Anesthesia Services, whose rates are not the eye practice's.
+function msoIndex() {
+  if (!S.d.msoIdx) {
+    const m = new Map();
+    for (const g of S.groups) {
+      const k = msoKey(g.name) + "|" + g.state; if (!m.has(k)) m.set(k, []); m.get(k).push(g);
+    }
+    S.d.msoIdx = m;
+  }
+  return S.d.msoIdx;
+}
+function msoGroups(c) {
+  const found = [], missing = [], same = (a, b) => msoKey(a) === msoKey(b), idx = msoIndex();
+  for (const [pn, st, city, npis, aka] of c.prac) {
+    let g = null;
+    for (const n of npis) { g = S.byId.get(n) || byOrg(S.d, n); if (g) break; }
+    for (const n of g ? [] : [pn, ...aka]) {
+      // A short, generic name ("Dermatology Associates") counts only in the same city.
+      const k = msoKey(n), generic = k.split(" ").length <= 2;
+      g = (idx.get(k + "|" + st) || []).find((x) => (generic ? city && x.city && same(city, x.city) : !city || !x.city || same(city, x.city)));
+      if (g) break;
+    }
+    if (!g) missing.push(`${pn} ${st}`);
+    else if (!found.includes(g)) found.push(g);
+  }
+  return { found, missing };
+}
+async function fillMso(raw) {
+  const tok = ++msoTok, cos = await msoLoad(), el = $("mso");
+  if (tok !== msoTok || !el || !S.d) return;
+  const c = msoMatch(cos, raw);
+  if (!c) return;
+  const { found, missing } = msoGroups(c);
+  S.mso = found;
+  const nohit = $("results").querySelector(".nohit");
+  if (nohit) nohit.remove();
+  el.innerHTML = `<div class="none msoh"><b>${esc(c.name)}</b> is a management company: its practices bill under their own
+      names. ${found.length ? `${found.length} of the ${c.prac.length} practices it lists ${found.length === 1 ? "is" : "are"} in ${esc(poss(S.p.label))} files:`
+      : `None of the ${c.prac.length} practices it lists is in ${esc(poss(S.p.label))} files.`}</div>`
+    + found.map((g, i) => `<button type="button" role="option" data-m="${i}"><span class="nm">${esc(title(g.name))}</span>
+      <span class="tag">${esc(g.city ? title(g.city) + ", " : "")}${esc(g.state)}</span><span class="sub">${esc(spec(g).label)}${g.org ? " · NPI " + esc(g.org) : ""}</span></button>`).join("")
+    + (missing.length ? `<div class="none msomiss">${found.length ? "Not found here" : "Its practices"}: ${missing.slice(0, 30).map((m) =>
+      `<button type="button" data-mq="${esc(m)}">${esc(m.slice(0, -3))} (${esc(m.slice(-2))})</button>`).join(", ")}${missing.length > 30 ? `, and ${missing.length - 30} more` : ""}.</div>` : "")
+    + `<div class="none msoh">Practices as listed on ${c.src ? `<a href="${esc(c.src)}" target="_blank" rel="noopener">its website</a>` : "its website"} or in its announcements.</div>`;
 }
 function pick(i) { const g = S.hits[i]; if (!g) return; $("q").value = title(g.name); show(g); }
 $("q").addEventListener("input", search);
@@ -852,10 +923,12 @@ $("results").addEventListener("click", (e) => {
   const b = e.target.closest("button[data-i]"); if (b) pick(+b.dataset.i);
   const t = e.target.closest("button[data-try]"); if (t) switchPayer(t.dataset.try);
   const r = e.target.closest("button[data-n]"); if (r && S.reg) openReg(S.reg[+r.dataset.n]);
+  const m = e.target.closest("button[data-m]"); if (m && S.mso && S.mso[+m.dataset.m]) { $("q").value = title(S.mso[+m.dataset.m].name); show(S.mso[+m.dataset.m]); }
+  const mq = e.target.closest("button[data-mq]"); if (mq) { e.stopPropagation(); $("q").value = mq.dataset.mq; search(); }
 });
 // The first practice or registry row on screen (the registry's come first when this payer has no exact match).
 function openFirst() {
-  const b = $("results").hidden ? null : $("results").querySelector("button[data-i], button[data-n]");
+  const b = $("results").hidden ? null : $("results").querySelector("button[data-m], button[data-i], button[data-n]");
   if (b) b.click(); else if (S.hits.length) pick(0); else $("q").focus();
 }
 $("go").addEventListener("click", () => {
