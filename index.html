@@ -701,7 +701,9 @@ async function show(g, ni) {
   // geography check; otherwise the practice's published rates alone.
   const gated = !g.verified;
   const annual = sp.annual_in_email && !gated ? annualFor(g, rows) : 0;
-  const prac = / practice$/.test(sp.label) ? sp.label : sp.label + " practice";
+  // A surgery center is not a "practice": its rates are the facility fee, compared with other surgery centers.
+  const asc = sp.key === "asc";
+  const prac = asc ? "surgery center" : / practice$/.test(sp.label) ? sp.label : sp.label + " practice";
   const where = `${prac}${g.state ? " in " + esc(g.state) : ""}`;
   const answer = gated
     ? `<div class="answer ok"><p>These are your published ${esc(U)} rates. We haven't verified a peer comparison for your practice yet; RSK can check them against what ${esc(U)} actually paid you.</p></div>`
@@ -717,8 +719,8 @@ async function show(g, ni) {
       // A code under 10% below is not "below", but the sentence must not say "at or above" while a row shows -4%
       // (BCBS audit, 2026-11-12).
       : rows.some((r) => r.compared && r.gap >= 0.5)
-      ? `<div class="answer ok"><p>${esc(U)} pays you <b>within ${m.min_gap_pct}% of the typical rate, or above it,</b> for ${art(sp.label)} ${where} on every code we checked.</p></div>`
-      : `<div class="answer ok"><p>${esc(U)} pays you <b>at or above the typical rate</b> for ${art(sp.label)} ${where} on every code we checked.</p></div>`;
+      ? `<div class="answer ok"><p>${esc(U)} pays you <b>within ${m.min_gap_pct}% of the typical rate, or above it,</b> for ${art(prac)} ${where} on every code we checked.</p></div>`
+      : `<div class="answer ok"><p>${esc(U)} pays you <b>at or above the typical rate</b> for ${art(prac)} ${where} on every code we checked.</p></div>`;
   const nets = netsOf(g);
   // How the comparison was made, beside the verdict (Fable product review, 2026-11-22): who the peers are, the month, the
   // rules, and that a published rate is not what was paid. Only numbers already on the page.
@@ -762,10 +764,10 @@ async function show(g, ni) {
       : nets.length ? `<div class="netpick"><span>${esc(U)} network</span> <b>${esc(netName(m.networks[nets[0]]))}</b></div>` : "<div></div>"}
       <button type="button" class="linkbtn printbtn" id="print">Print or save as PDF</button></div>
     <div class="tablewrap"><table>
-      <thead><tr><th>Code</th><th>Service</th><th class="num">Your rate</th>${gated ? "" : `<th class="num">Typical in ${esc(g.state)}</th><th class="num">Difference</th><th class="num c-peers">Practices compared</th>`}</tr></thead>
-      <tbody>${rows.map((r) => `<tr><td class="code">${r.code}</td><td><span class="mcode">${r.code}</span>${esc(r.desc)}${r.surgeon && !r.code.includes("-") ? ' <span class="na">(in-facility rate)</span>' : ""}</td>
+      <thead><tr><th>Code</th><th>Service</th><th class="num">Your rate</th>${gated ? "" : `<th class="num">Typical in ${esc(g.state)}</th><th class="num">Difference</th><th class="num c-peers">${asc ? "Centers" : "Practices"} compared</th>`}</tr></thead>
+      <tbody>${rows.map((r) => `<tr><td class="code">${r.code}</td><td><span class="mcode">${r.code}</span>${esc(r.desc)}${r.surgeon && !asc && !r.code.includes("-") ? ' <span class="na">(in-facility rate)</span>' : ""}</td>
         <td class="num">${cents(r.rate)}${r.mixed ? `<span class="na lowest">one of several published rates${S.meta.mixed_rate === "highest" ? " (highest shown)" : ""}</span>` : ""}</td>${gated ? "" : `
-        <td class="num">${r.compared ? cents(r.med) + `<span class="na mpeers">${r.peers} practices</span>` : '<span class="na">not compared</span>'}</td>
+        <td class="num">${r.compared ? cents(r.med) + `<span class="na mpeers">${r.peers} ${asc ? "centers" : "practices"}</span>` : '<span class="na">not compared</span>'}</td>
         <td class="num">${r.compared ? `<span class="gapcell">${gauge(r)}<span class="gap ${r.below ? "low" : r.gap < 0 ? "high" : ""}">${Math.trunc(r.gap) === 0 ? "" : r.gap > 0 ? "−" : "+"}${Math.abs(Math.trunc(r.gap))}%</span></span>` : ""}</td>
         <td class="num c-peers">${r.compared ? r.peers : ""}</td>`}</tr>`).join("")}</tbody>
     </table></div>
@@ -773,7 +775,7 @@ async function show(g, ni) {
       <p>These are the rates ${esc(U)} agreed to. RSK checks your remittances for claims paid below even this rate, and helps when your contract comes up for renewal.</p></div>
       <a class="btn" href="https://www.rsk.com/practices/rsk-health#health-review" target="_blank" rel="noopener">Request a confidential review <span aria-hidden="true">→</span></a></div>
     ${g.note ? `<p class="note">${esc(g.note)}</p>` : ""}
-    <p class="note">From ${esc(poss(L))} published negotiated-rate files${m.file_month ? ", " + esc(m.file_month) : ""}.${annual > 0 ? ` The yearly figure is an estimate at typical ${esc(U)} volume for a practice your size.` : ""} Payor Rate Check is run by RSK Health, 200 E. Van Buren St., Suite 600, Phoenix, AZ 85004, and is not affiliated with ${esc(L)}. To correct or remove a listing, use the review request link above or write to that address.</p>`;
+    <p class="note">From ${esc(poss(L))} published negotiated-rate files${m.file_month ? ", " + esc(m.file_month) : ""}.${annual > 0 ? ` The yearly figure is an estimate at typical ${esc(U)} volume for a practice your size.` : ""}${asc ? ` Surgery center rates are the facility fee for each procedure, compared with other surgery centers in ${esc(g.state)} on the same network. Each center is shown the procedures of its specialty, judged from its registered name (eye, digestive, orthopedic, hand, foot and ankle, pain, ENT, urology or women’s health; children’s centers, children’s procedures); a center without one in its name is shown all of them. Joint replacement, ACL and rotator cuff repair are shown but not compared: payers price them with and without the implant.${S.p.key === "aetna" ? ` Aetna’s files don’t mark facility claims, so a rate under 60% of Medicare’s own payment to surgery centers for the procedure is left out as a surgeon’s fee.` : ""}` : ""} Payor Rate Check is run by RSK Health, 200 E. Van Buren St., Suite 600, Phoenix, AZ 85004, and is not affiliated with ${esc(L)}. To correct or remove a listing, use the review request link above or write to that address.</p>`;
   const sel = $("net"); if (sel) sel.onchange = (e) => show(g, +e.target.value);
   const pb = $("print"); if (pb) pb.onclick = () => window.print();
   fillAlso(g, tok);
