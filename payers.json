@@ -5,7 +5,7 @@
    "label": "UnitedHealthcare",
    "short": "UHC",
    "file_month": "November 2026",
-   "practices": 89310,
+   "practices": 91222,
    "path": ""
   },
   {
@@ -13,7 +13,7 @@
    "label": "Blue Cross Blue Shield",
    "short": "BCBS",
    "file_month": "November 2026",
-   "practices": 301378
+   "practices": 303871
   },
   {
    "key": "anthem",
@@ -34,7 +34,7 @@
    "label": "Cigna",
    "short": "Cigna",
    "file_month": "November 2026",
-   "practices": 168525
+   "practices": 172373
   }
  ]
 }
