@@ -710,9 +710,9 @@ async function show(g, ni) {
     : compared && rows.every((r) => !r.compared || r.uni)
     // One fee schedule for everyone (BCBS Michigan pays all 94 MI ophthalmology practices $149.92 for 92014):
     // "at or above the typical rate" would say nothing (Aaron, 2026-11-12).
-    ? `<div class="answer ok"><p>${esc(U)} pays every ${esc(prac)} in ${esc(g.state)} on this network the same published rate for these codes: one fee schedule for all, so there's no gap between practices to find. RSK can still check what ${esc(U)} actually paid you against it.</p></div>`
+    ? `<div class="answer ok"><p>${esc(U)} pays every ${esc(prac)} in ${esc(g.state)} on this network the same published rate for these codes: one fee schedule for all, so there's no gap between ${asc ? "centers" : "practices"} to find. RSK can still check what ${esc(U)} actually paid you against it.</p></div>`
     : !compared
-    ? `<div class="answer ok"><p>These are your published ${esc(U)} rates. We don't have a fair peer comparison for your practice on this network yet; RSK can check them against what ${esc(U)} actually paid you.</p></div>`
+    ? `<div class="answer ok"><p>These are your published ${esc(U)} rates. We don't have a fair peer comparison for your ${asc ? "surgery center" : "practice"} on this network yet; RSK can check them against what ${esc(U)} actually paid you.</p></div>`
     : below
       ? `<div class="answer"><p>On <b>${below} of ${compared}</b> codes we checked, ${esc(U)} pays you at least ${m.min_gap_pct}% less than the typical ${where}.</p>
          ${annual > 0 ? `<div class="money"><span class="amt">≈ $${annual.toLocaleString("en-US")}</span><span>a year, if your ${esc(U)} volume is typical</span></div>` : ""}</div>`
