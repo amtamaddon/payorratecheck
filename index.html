@@ -730,8 +730,8 @@ async function show(g, ni) {
   const how = `<details class="how"><summary>How we compared</summary><ul>
     ${gated ? `<li>We show a comparison only after checking that this practice's state and specialty match ${esc(poss(L))} files. This one isn't checked yet.</li>`
       : cmp.length ? `<li>Each rate is set against the typical (median) rate of ${peers} ${esc(sp.peer_phrase || "independent " + prac + "s")} in ${esc(g.state)}${netLabel ? ` on the ${esc(netLabel)} network` : ""}.</li>
-      <li>A code counts as below when ${esc(U)} pays you at least ${m.min_gap_pct}% less than that rate. Codes marked "not compared" have fewer than ${m.min_peers} comparable practices, or a rate we couldn't match fairly.</li>`
-      : `<li>No code here has at least ${m.min_peers} comparable practices on this network, so nothing is compared.</li>`}
+      <li>A code counts as below when ${esc(U)} pays you at least ${m.min_gap_pct}% less than that rate. Codes marked "not compared" have fewer than ${m.min_peers} comparable ${asc ? "centers" : "practices"}, or a rate we couldn't match fairly.</li>`
+      : `<li>No code here has at least ${m.min_peers} comparable ${asc ? "centers" : "practices"} on this network, so nothing is compared.</li>`}
     ${rows.some((r) => r.mixed) ? `<li>Where ${esc(U)} publishes several rates for a code, the highest is shown.</li>` : ""}
     <li>From ${esc(poss(L))} published negotiated-rate files${m.file_month ? ", " + esc(m.file_month) : ""}.</li>
     <li>A published rate is what ${esc(U)} agreed to pay, not what it paid. RSK checks your remittances against it.</li></ul></details>`;
