@@ -260,12 +260,16 @@ a.btn { display: inline-flex; align-items: center; gap: 8px; text-decoration: no
 .vmain { flex: 1 1 360px; min-width: 0; display: grid; gap: 10px; }
 .vsub { margin: 0; color: var(--muted); font-size: 0.86rem; }
 .spread { flex: 0 1 300px; min-width: 220px; }
-.spread .track { display: flex; gap: 2px; height: 8px; border-radius: 999px; overflow: hidden; }
-.seg-low { background: var(--below); }
-.seg-mid { background: #cfcdc4; }
-.seg-high { background: var(--above); }
-.spread .cap { display: flex; justify-content: space-between; gap: 10px; margin-top: 8px; font-size: 0.75rem; color: var(--muted); }
-.spread .cap b { color: var(--ink); font-weight: 600; font-variant-numeric: tabular-nums; }
+.spread .lbl { display: flex; justify-content: space-between; font-size: 0.72rem; color: var(--muted); margin-bottom: 5px; }
+.spread .track { position: relative; display: flex; gap: 2px; height: 8px; }
+.spread .track span { height: 8px; }
+.z-red { background: #c94a38; border-radius: 999px 0 0 999px; }
+.z-yel { background: #d9a02b; }
+.z-grn { background: #257a54; border-radius: 0 999px 999px 0; }
+.spread .track i { position: absolute; top: 50%; width: 14px; height: 14px; border-radius: 50%; background: #fff;
+  border: 3px solid var(--ink); transform: translate(-50%, -50%); box-shadow: 0 1px 4px rgba(0, 0, 0, 0.25); }
+.spread .cap { display: flex; justify-content: space-between; flex-wrap: wrap; gap: 2px 10px; margin-top: 9px; font-size: 0.75rem; color: var(--muted); font-variant-numeric: tabular-nums; }
+.spread .cap b { color: var(--ink); font-weight: 600; }
 .vcard .how { padding-top: 10px; border-top: 1px solid var(--line); }
 .ratebar { display: flex; flex-wrap: wrap; justify-content: space-between; align-items: center; gap: 10px 20px; margin-bottom: -14px; }
 .printbtn { font-size: 0.86rem; }
@@ -734,10 +738,16 @@ async function show(g, ni) {
   // below, within and above the typical rate, and how the comparison was made. Counts of the rows below: no new numbers.
   const above = rows.filter((r) => r.compared && r.gap <= -m.min_gap_pct).length, within = compared - below - above;
   const uniform = compared && rows.every((r) => !r.compared || r.uni);
+  // The range: red more than min_gap_pct% below typical, yellow within it, green more than it above (the verdict's own
+  // rule); the pin is the middle of the table's differences (their median), on a -30% to +30% scale.
+  const ds = cmp.map((r) => -r.gap).sort((a, b) => a - b), mid = ds.length >> 1;
+  const dm = ds.length ? (ds.length % 2 ? ds[mid] : (ds[mid - 1] + ds[mid]) / 2) : 0;
+  const pin = Math.max(2, Math.min(98, (dm + 30) / 60 * 100)), cut = m.min_gap_pct / 60 * 100;
+  const zone = dm <= -m.min_gap_pct ? "Below typical" : dm >= m.min_gap_pct ? "Above typical" : "Typical range";
   const spread = gated || !compared || uniform ? "" : `<div class="spread">
-      <div class="track" aria-hidden="true">${[["low", below], ["mid", within], ["high", above]].filter(([, n]) => n)
-        .map(([k, n]) => `<span class="seg-${k}" style="flex:${n}"></span>`).join("")}</div>
-      <div class="cap"><span><b>${below}</b> below typical</span><span><b>${within}</b> within ${m.min_gap_pct}%</span><span><b>${above}</b> above</span></div></div>`;
+      <div class="lbl" aria-hidden="true"><span>Below</span><span>Typical</span><span>Above</span></div>
+      <div class="track" aria-hidden="true"><span class="z-red" style="width:${50 - cut}%"></span><span class="z-yel" style="width:${2 * cut}%"></span><span class="z-grn" style="width:${50 - cut}%"></span><i style="left:${pin.toFixed(1)}%"></i></div>
+      <div class="cap"><b>${zone}</b><span>${below} below · ${within} within ${m.min_gap_pct}% · ${above} above</span></div></div>`;
   const vsub = !gated && cmp.length ? `Compared with ${peers} ${esc(sp.peer_phrase || "independent " + prac + "s")} in ${esc(g.state)}${netLabel ? ` on ${esc(netLabel.replace(/ \(same rates:.*\)$/, ""))}` : ""}${m.file_month ? ` · ${esc(m.file_month)} files` : ""}` : "";
   const card = `<div class="vcard${gated || !compared || uniform ? " plain" : below ? " low" : ""}">
       <div class="vtop"><div class="vmain">${answer}${vsub ? `<p class="vsub">${vsub}</p>` : ""}</div>${spread}</div>
